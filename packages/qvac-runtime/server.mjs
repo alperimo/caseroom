@@ -564,12 +564,22 @@ const server = http.createServer(async (request, response) => {
         return;
       }
 
+      const contextPhrases = Array.isArray(body.contextPhrases)
+        ? body.contextPhrases
+          .filter((phrase) => typeof phrase === "string")
+          .map((phrase) => phrase.replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+          .slice(0, 80)
+        : [];
+      const lexicalHint = contextPhrases.length > 0
+        ? ` Likely clinical terms in this case: ${contextPhrases.join(", ")}.`
+        : "";
       const readyAsrModelId = await ensureAsrModelLoaded();
       const audioChunk = Buffer.from(audioBase64, "base64");
       const text = await transcribe({
         modelId: readyAsrModelId,
         audioChunk,
-        prompt: "English clinical consultation. Transcribe only the clinician's spoken words."
+        prompt: `English medical consultation. Transcribe only the clinician's spoken words.${lexicalHint}`
       });
       const transcript = String(text ?? "").replace(/\s+/g, " ").trim();
       sendJson(response, 200, {

@@ -14,7 +14,7 @@
     "build": "npm run build --workspace @caseroom/desktop",
     "lint": "npm run lint --workspace @caseroom/desktop",
     "typecheck": "npm run typecheck --workspace @caseroom/desktop",
-    "test": "vitest run packages/simulation-core/src/index.test.ts"
+    "test": "vitest run packages/simulation-core/src/index.test.ts packages/qvac-runtime/src/index.test.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

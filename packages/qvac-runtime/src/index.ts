@@ -60,43 +60,25 @@ export type VoiceCaptureController = {
 };
 
 export type VoiceCaptureOptions = {
+  contextPhrases?: string[];
   onInterim?: (text: string) => void;
   onFinal: (text: string) => void | Promise<void>;
   onError?: (message: string) => void;
   onStateChange?: (state: "idle" | "listening" | "processing") => void;
 };
 
-const topicAliases: Record<string, string[]> = {
-  allergies: ["allergy", "allergic", "medication allergy", "drug allergy"],
-  "cardiac history": ["heart history", "heart problems", "heart disease", "heart attack", "family history"],
-  "chest pain": ["chest pressure", "pain in your chest"],
-  clots: ["clot", "blood clots", "large clots", "clubs", "club", "cloths"],
-  cough: ["coughing"],
-  diet: ["eating", "appetite", "food", "meat"],
-  duration: ["how long", "when did", "how many days", "how many weeks", "how many months", "started"],
-  fever: ["temperature", "high temperature", "feverish"],
-  "flank pain": ["back pain", "side pain", "kidney pain", "pain in your back", "pain in your side"],
-  "leg swelling": ["swollen legs", "ankle swelling", "swollen ankles", "puffy ankles"],
-  "medication adherence": ["taking your tablets", "taking your meds", "missed tablets", "stopped medication"],
-  "neurological symptoms": ["weakness", "numbness", "trouble speaking", "confusion", "stroke symptoms"],
-  orthopnea: ["pillows", "lie flat", "lying flat", "sleep upright"],
-  pregnancy: ["pregnant", "are you pregnant", "could you be pregnant", "last period", "period late", "contraception"],
-  radiation: ["spread", "left arm", "jaw", "arm pain"],
-  "shortness of breath": ["breathless", "short of breath", "trouble breathing", "difficulty breathing"],
-  smoking: ["smoke", "smoker", "cigarettes"],
-  "smoking history": ["smoke", "smoker", "cigarettes"],
-  sweating: ["clammy", "sweaty", "sweating"],
-  "vision changes": ["blurred vision", "vision", "visual", "eyesight"]
+const clinicalConceptExpansions: Record<string, string[]> = {
+  allergy: ["allergic", "allergies"],
+  bleed: ["bleeding", "blood"],
+  breath: ["breathing", "breathless", "short of breath"],
+  cardiac: ["heart"],
+  clot: ["clots"],
+  menstruation: ["period", "periods", "last period"],
+  medication: ["medicine", "meds", "tablets"],
+  pregnant: ["pregnancy", "contraception"],
+  swelling: ["swollen", "puffy"],
+  vision: ["visual", "eyesight"]
 };
-
-const medicalTranscriptCorrections: Array<[RegExp, string]> = [
-  [/\bclubs\b/gi, "clots"],
-  [/\bclub\b/gi, "clot"],
-  [/\bcloths\b/gi, "clots"],
-  [/\bpc o s\b/gi, "PCOS"],
-  [/\bpcs\b/gi, "PCOS"],
-  [/\buti\b/gi, "UTI"]
-];
 
 export function getRuntimeStatus(): RuntimeStatus {
   const voiceSupport = getVoiceRuntimeSupport();
@@ -251,40 +233,137 @@ function describeVoiceMode(support: VoiceRuntimeSupport): string {
   return "text fallback only";
 }
 
-function normalizeMedicalTranscript(text: string): string {
-  return medicalTranscriptCorrections.reduce(
-    (next, [pattern, replacement]) => next.replace(pattern, replacement),
-    text,
-  );
+function normalizeLexiconPhrase(value: string): string {
+  return value
+    .replace(/[_/-]/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
-function aliasesForTopic(topic: string): string[] {
-  return [topic, topic.replaceAll("_", " "), ...(topicAliases[topic] ?? [])];
+function uniquePhrases(values: string[]): string[] {
+  return [...new Set(values.map(normalizeLexiconPhrase).filter(Boolean))];
 }
 
-function promptMentionsTopic(prompt: string, topic: string): boolean {
-  const lowered = normalizeMedicalTranscript(prompt).toLowerCase();
-  return aliasesForTopic(topic).some((alias) => {
+function expandClinicalPhrase(phrase: string): string[] {
+  const normalized = normalizeLexiconPhrase(phrase);
+  const words = normalized.split(" ").filter(Boolean);
+  const expanded = new Set<string>([normalized]);
+
+  for (const word of words) {
+    expanded.add(word);
+    if (word.endsWith("s") && word.length > 3) {
+      expanded.add(word.slice(0, -1));
+    } else if (word.length > 3) {
+      expanded.add(`${word}s`);
+    }
+    for (const [concept, alternatives] of Object.entries(clinicalConceptExpansions)) {
+      if (word === concept || alternatives.includes(word)) {
+        expanded.add(concept);
+        alternatives.forEach((alternative) => expanded.add(alternative));
+      }
+    }
+  }
+
+  if (words.length > 1) {
+    expanded.add(words.join(" "));
+  }
+  return [...expanded];
+}
+
+function buildScenarioLexicon(session: EncounterSession): string[] {
+  const hidden = session.scenario.hiddenCase;
+  const truthKeys = Object.keys(hidden.truthTable);
+  const values = [
+    session.scenario.title,
+    session.scenario.specialty,
+    session.scenario.brief.chiefComplaint,
+    hidden.diagnosis,
+    ...hidden.mustAsk,
+    ...hidden.redFlags,
+    ...hidden.safetyNet,
+    ...truthKeys
+  ];
+  return uniquePhrases(values.flatMap(expandClinicalPhrase));
+}
+
+export function buildVoiceContextPhrases(session: EncounterSession): string[] {
+  return buildScenarioLexicon(session)
+    .filter((phrase) => phrase.length >= 3)
+    .slice(0, 60);
+}
+
+function levenshtein(left: string, right: string): number {
+  const rows = left.length + 1;
+  const cols = right.length + 1;
+  const matrix = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
+  for (let row = 0; row < rows; row += 1) matrix[row][0] = row;
+  for (let col = 0; col < cols; col += 1) matrix[0][col] = col;
+
+  for (let row = 1; row < rows; row += 1) {
+    for (let col = 1; col < cols; col += 1) {
+      const cost = left[row - 1] === right[col - 1] ? 0 : 1;
+      matrix[row][col] = Math.min(
+        matrix[row - 1][col] + 1,
+        matrix[row][col - 1] + 1,
+        matrix[row - 1][col - 1] + cost,
+      );
+    }
+  }
+
+  return matrix[left.length][right.length];
+}
+
+function shouldCorrectToken(token: string, candidate: string): boolean {
+  if (token.length < 4 || candidate.length < 4 || Math.abs(token.length - candidate.length) > 2) {
+    return false;
+  }
+  if (token === candidate) {
+    return false;
+  }
+
+  const distance = levenshtein(token, candidate);
+  const normalizedDistance = distance / Math.max(token.length, candidate.length);
+  if (normalizedDistance <= 0.34) {
+    return true;
+  }
+
+  const sameClinicalStem = token.slice(0, 2) === candidate.slice(0, 2) && token.length <= 6 && candidate.length <= 6;
+  return sameClinicalStem && distance <= 3;
+}
+
+function normalizeMedicalTranscript(text: string, contextPhrases: string[] = []): string {
+  const terms = uniquePhrases(contextPhrases.flatMap(expandClinicalPhrase))
+    .filter((term) => /^[a-z0-9]+$/i.test(term) && term.length >= 4);
+  if (terms.length === 0) {
+    return text;
+  }
+
+  return text.replace(/\b[\p{L}\p{N}]{4,}\b/gu, (token) => {
+    const lowerToken = token.toLowerCase();
+    const correction = terms.find((term) => shouldCorrectToken(lowerToken, term));
+    return correction ?? token;
+  });
+}
+
+function promptMentionsTopic(prompt: string, topic: string, session: EncounterSession): boolean {
+  const lowered = normalizeMedicalTranscript(prompt, buildScenarioLexicon(session)).toLowerCase();
+  return expandClinicalPhrase(topic).some((alias) => {
     const escaped = alias.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp(`\\b${escaped}\\b`, "i").test(lowered);
   });
 }
 
 function normalizePromptForScenario(session: EncounterSession, prompt: string): string {
-  let normalized = normalizeMedicalTranscript(prompt);
-  for (const topic of Object.keys(session.scenario.hiddenCase.truthTable)) {
-    if (topic === "clots" && promptMentionsTopic(normalized, topic)) {
-      normalized = normalized.replace(/\bclubs?\b/gi, "clots").replace(/\bcloths\b/gi, "clots");
-    }
-  }
-  return normalized;
+  return normalizeMedicalTranscript(prompt, buildScenarioLexicon(session));
 }
 
 function applyPromptSignals(session: EncounterSession, prompt: string): EncounterSession {
   let next = appendTurn(session, "clinician", prompt);
 
   for (const topic of Object.keys(session.scenario.hiddenCase.truthTable)) {
-    if (promptMentionsTopic(prompt, topic)) {
+    if (promptMentionsTopic(prompt, topic, session)) {
       next = revealTopic(next, topic);
     }
   }
@@ -311,7 +390,7 @@ function answerHistoryFallback(session: EncounterSession, prompt: string): Encou
   }
 
   for (const [topic, answer] of Object.entries(session.scenario.hiddenCase.truthTable)) {
-    if (promptMentionsTopic(prompt, topic)) {
+    if (promptMentionsTopic(prompt, topic, session)) {
       matched = true;
       next = revealTopic(next, topic);
       next = appendTurn(next, "patient", answer);
@@ -619,19 +698,20 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
 
 async function transcribeAudioBlob(audioBlob: Blob, options: VoiceCaptureOptions): Promise<void> {
   const audioBase64 = await blobToBase64(audioBlob);
+  const contextPhrases = options.contextPhrases ?? [];
   const response = await fetch(`${resolveRuntimeUrl()}/asr`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ audioBase64, mimeType: audioBlob.type })
+    body: JSON.stringify({ audioBase64, mimeType: audioBlob.type, contextPhrases })
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(payload.error ?? `QVAC ASR failed with ${response.status}.`);
   }
   const payload = (await response.json()) as { text?: string };
-  const text = payload.text?.trim() ?? "";
+  const text = normalizeMedicalTranscript(payload.text?.trim() ?? "", contextPhrases).trim();
   if (!isMeaningfulTranscript(text)) {
     options.onError?.("I couldn't hear speech clearly. Try again a little closer to the microphone, or type the sentence.");
     return;

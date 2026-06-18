@@ -2,6 +2,6 @@
   "name": "@caseroom/case-packs-medical-osce",
   "private": true,
   "version": "0.1.0",
-  "type": "module"
+  "type": "module",
+  "exports": "./src/index.ts"
 }
-

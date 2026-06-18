@@ -26,6 +26,7 @@ import {
   type MedicalScenario
 } from "@caseroom/simulation-core";
 import {
+  buildVoiceContextPhrases,
   cancelSpeech,
   finishEncounter,
   generatePatientTurn,
@@ -452,6 +453,7 @@ export function App() {
     setVoiceError(null);
     cancelSpeech();
     voiceControllerRef.current = startVoiceCapture({
+      contextPhrases: session ? buildVoiceContextPhrases(session) : [],
       onInterim(text) {
         setMessage(text);
       },
