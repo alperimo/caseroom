@@ -2,13 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Brain,
+  ChevronRight,
   ClipboardList,
+  Clock3,
   FileText,
+  LockKeyhole,
   Mic,
+  Play,
   Send,
   ShieldCheck,
   Stethoscope,
   TestTube2,
+  UserRound,
   Volume2
 } from "lucide-react";
 import { medicalCasePack } from "@caseroom/case-packs-medical-osce";
@@ -64,6 +69,10 @@ function getPatientInitials(name: string): string {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function formatDifficulty(difficulty: MedicalScenario["difficulty"]): string {
+  return difficulty === "easy" ? "Guided" : difficulty === "medium" ? "Focused" : "High stakes";
 }
 
 function buildClinicalFindings(session: EncounterSession): ClinicalFinding[] {
@@ -595,46 +604,70 @@ export function App() {
       <header className="topbar">
         <div className="topbar-copy">
           <p className="eyebrow">CaseRoom</p>
-          <h1>Private clinical rehearsal for difficult patient encounters</h1>
+          <h1>Clinical simulation room</h1>
           <p className="topbar-note">
-            Short, high-stakes practice rooms with on-device knowledge, saved sessions, and
-            structured debriefs.
+            Practice a focused patient encounter, make decisions under pressure, then review the debrief.
           </p>
         </div>
         <div className="status-strip">
-          <span className="status-pill success">{productizeStatusLabel(runtime.modelMode)}</span>
-          <span className="status-pill neutral">{productizeStatusLabel(runtime.completionMode)}</span>
-          <span className="status-pill neutral">{productizeStatusLabel(runtime.retrievalMode)}</span>
-          <span className="status-pill warning">{productizeStatusLabel(runtime.storageMode)}</span>
+          <span className="status-pill success">
+            <LockKeyhole size={15} />
+            Private room
+          </span>
+          <span className="status-pill neutral">
+            <Mic size={15} />
+            Voice consult
+          </span>
+          <span className="status-pill warning">
+            <Clock3 size={15} />
+            Timed cases
+          </span>
         </div>
       </header>
 
       {screen === "lobby" && (
         <section className="hero-grid">
-          <div className="hero-copy card compact-hero">
-            <p className="eyebrow">Today&apos;s Room</p>
-            <h2>Choose a case, enter the room, finish with a saved debrief.</h2>
+          <div className="hero-copy card compact-hero simulator-hero">
+            <div>
+              <p className="eyebrow">Simulation Deck</p>
+              <h2>Choose today&apos;s patient and run the consult.</h2>
+              <p className="lead">
+                Each case starts with a doorway brief, moves into a voice-first room, and ends with a scored clinical debrief.
+              </p>
+            </div>
+            <div className="hero-room-preview" aria-hidden="true">
+              <div className="preview-wall" />
+              <div className="preview-patient">
+                <UserRound size={28} />
+              </div>
+              <div className="preview-bubble">“Doctor, I&apos;m worried.”</div>
+              <div className="preview-monitor">
+                <Activity size={16} />
+                <span>HR 88</span>
+                <span>SpO2 99</span>
+              </div>
+            </div>
             <div className="hero-metrics">
               <div className="metric-tile">
                 <span>Cases</span>
                 <strong>{medicalCasePack.length}</strong>
               </div>
               <div className="metric-tile">
-                <span>Knowledge</span>
-                <strong>{productizeStatusLabel(runtime.retrievalMode)}</strong>
+                <span>Mode</span>
+                <strong>Private</strong>
               </div>
               <div className="metric-tile">
-                <span>Sessions</span>
+                <span>Saved runs</span>
                 <strong>{history.length}</strong>
               </div>
             </div>
           </div>
-          <div className="hero-copy card quick-steps">
-            <p className="eyebrow">Flow</p>
+          <div className="hero-copy card quick-steps simulator-steps">
+            <p className="eyebrow">Room Flow</p>
             <div className="step-row">
-              <span>Pick case</span>
-              <span>Run consult</span>
-              <span>Save report</span>
+              <span><strong>01</strong> Read doorway brief</span>
+              <span><strong>02</strong> Speak with the patient</span>
+              <span><strong>03</strong> Review the debrief</span>
             </div>
           </div>
         </section>
@@ -645,26 +678,36 @@ export function App() {
           <section className="card panel-span-2">
             <div className="section-header">
               <div>
-                <p className="eyebrow">Case Lobby</p>
-                <h2>Choose the next patient</h2>
+                <p className="eyebrow">Patient Queue</p>
+                <h2>Select a room</h2>
               </div>
-              <span className="status-pill neutral">{medicalCasePack.length} available cases</span>
+              <span className="status-pill neutral">{medicalCasePack.length} ready</span>
             </div>
             <div className="case-grid">
               {medicalCasePack.map((scenario) => (
-                <button className="case-card" key={scenario.id} onClick={() => chooseCase(scenario)}>
-                  <div className="case-meta">
-                    <span>{scenario.specialty}</span>
-                    <span>{scenario.difficulty.toUpperCase()}</span>
+                <button
+                  className={`case-card case-card-${scenario.difficulty}`}
+                  key={scenario.id}
+                  onClick={() => chooseCase(scenario)}
+                >
+                  <div className="case-card-top">
+                    <span className="case-avatar">{getPatientInitials(scenario.brief.patientName)}</span>
+                    <div className="case-meta">
+                      <span>{scenario.specialty}</span>
+                      <span>{formatDifficulty(scenario.difficulty)}</span>
+                    </div>
                   </div>
                   <h3>{scenario.title}</h3>
                   <p>{scenario.brief.chiefComplaint}</p>
                   <div className="case-tags">
-                    {scenario.hiddenCase.redFlags.map((flag) => (
+                    {scenario.hiddenCase.redFlags.slice(0, 3).map((flag) => (
                       <span key={flag}>{flag}</span>
                     ))}
                   </div>
-                  <span className="case-cta">Open brief</span>
+                  <span className="case-cta">
+                    Open room
+                    <ChevronRight size={17} />
+                  </span>
                 </button>
               ))}
             </div>
@@ -726,41 +769,116 @@ export function App() {
       )}
 
       {screen === "brief" && selectedCase && session && (
-        <main className="page-grid">
-          <section className="card panel-span-2 doorway-brief">
-            <p className="eyebrow">Doorway Brief</p>
-            <h2>
-              {selectedCase.brief.patientName}, {selectedCase.brief.age}
-            </h2>
-            <p className="lead">{selectedCase.brief.chiefComplaint}</p>
-            <div className="brief-grid">
+        <main className="brief-shell">
+          <section className="card doorway-brief briefing-console">
+            <div className="briefing-main">
+              <div className="briefing-id">
+                <span className="case-avatar large">{getPatientInitials(selectedCase.brief.patientName)}</span>
+                <div>
+                  <p className="eyebrow">Doorway Brief</p>
+                  <h2>
+                    {selectedCase.brief.patientName}, {selectedCase.brief.age}
+                  </h2>
+                  <p>{selectedCase.specialty} · {formatDifficulty(selectedCase.difficulty)}</p>
+                </div>
+              </div>
+
+              <div className="briefing-quote">
+                <span>Reason for visit</span>
+                <strong>“{selectedCase.brief.chiefComplaint}”</strong>
+              </div>
+
+              <div className="briefing-vitals" aria-label="Visible vitals">
+                <span><Activity size={16} /> HR {selectedCase.brief.visibleVitals.hr}</span>
+                <span>BP {selectedCase.brief.visibleVitals.bp}</span>
+                <span>RR {selectedCase.brief.visibleVitals.rr}</span>
+                <span>SpO2 {selectedCase.brief.visibleVitals.spo2}</span>
+                <span>Temp {selectedCase.brief.visibleVitals.temp}</span>
+              </div>
+            </div>
+
+            <aside className="briefing-side">
+              <p className="eyebrow">Room Objectives</p>
+              <div className="briefing-checklist">
+                {selectedCase.brief.tasks.map((task, index) => (
+                  <span key={task}>
+                    <strong>{index + 1}</strong>
+                    {task}
+                  </span>
+                ))}
+              </div>
+              <div className="briefing-actions">
+                <button className="ghost-button" onClick={resetFlow}>
+                  Back to lobby
+                </button>
+                <button className="primary-button enter-room-button" onClick={enterRoom}>
+                  <Play size={18} />
+                  Enter room
+                </button>
+              </div>
+            </aside>
+          </section>
+        </main>
+      )}
+
+      {screen === "debrief" && activeReport && (
+        <main className="debrief-shell">
+          <section className="card debrief-console">
+            <div className="debrief-hero">
               <div>
-                <h3>Visible vitals</h3>
+                <p className="eyebrow">Debrief</p>
+                <h2>{activeReport.title}</h2>
+                <p>{activeReport.summary}</p>
+              </div>
+              <div className="debrief-score">
+                <span>Clinical score</span>
+                <strong>{formatPercent(activeReport.overallScore)}</strong>
+              </div>
+            </div>
+
+            <div className="debrief-grid">
+              <div className="debrief-panel strengths">
+                <h3>What went well</h3>
                 <ul className="compact-list">
-                  <li>HR: {selectedCase.brief.visibleVitals.hr}</li>
-                  <li>BP: {selectedCase.brief.visibleVitals.bp}</li>
-                  <li>RR: {selectedCase.brief.visibleVitals.rr}</li>
-                  <li>SpO2: {selectedCase.brief.visibleVitals.spo2}</li>
-                  <li>Temp: {selectedCase.brief.visibleVitals.temp}</li>
+                  {activeReport.strengths.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
                 </ul>
               </div>
-              <div>
-                <h3>Tasks</h3>
+              <div className="debrief-panel gaps">
+                <h3>What to improve</h3>
                 <ul className="compact-list">
-                  {selectedCase.brief.tasks.map((task) => (
-                    <li key={task}>{task}</li>
+                  {activeReport.gaps.map((item) => (
+                    <li key={item}>{item}</li>
                   ))}
                 </ul>
               </div>
             </div>
+
+            <div className="citations-box debrief-panel">
+              <h3>Source-backed notes</h3>
+              <ul className="compact-list">
+                {activeReport.citations.map((citation) => (
+                  <li key={citation}>
+                    {citation}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             <div className="action-row">
-              <button className="ghost-button" onClick={resetFlow}>
-                Back to lobby
+              <button className="secondary-button" onClick={exportReport} type="button">
+                {exportState === "saving" ? "Saving report..." : "Save report"}
               </button>
-              <button className="primary-button" onClick={enterRoom}>
-                Enter room
+              <button className="primary-button" onClick={resetFlow} type="button">
+                Return to lobby
               </button>
             </div>
+            {exportMessage ? (
+              <p className={exportState === "error" ? "export-feedback error" : "export-feedback"}>
+                {exportMessage}
+              </p>
+            ) : null}
           </section>
         </main>
       )}
@@ -968,65 +1086,6 @@ export function App() {
         </main>
       )}
 
-      {screen === "debrief" && activeReport && (
-        <main className="page-grid">
-          <section className="card panel-span-2">
-            <div className="section-header">
-              <div>
-                <p className="eyebrow">Debrief</p>
-                <h2>{activeReport.title}</h2>
-              </div>
-              <span className="score-badge">{formatPercent(activeReport.overallScore)}</span>
-            </div>
-
-            <p className="lead">{activeReport.summary}</p>
-
-            <div className="brief-grid">
-              <div>
-                <h3>Strengths</h3>
-                <ul className="compact-list">
-                  {activeReport.strengths.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h3>Missed / improve</h3>
-                <ul className="compact-list">
-                  {activeReport.gaps.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <div className="citations-box">
-              <h3>Local citations</h3>
-              <ul className="compact-list">
-                {activeReport.citations.map((citation) => (
-                  <li key={citation}>
-                    {citation}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="action-row">
-              <button className="secondary-button" onClick={exportReport} type="button">
-                {exportState === "saving" ? "Saving report..." : "Save report"}
-              </button>
-              <button className="ghost-button" onClick={resetFlow}>
-                Return to case lobby
-              </button>
-            </div>
-            {exportMessage ? (
-              <p className={exportState === "error" ? "export-feedback error" : "export-feedback"}>
-                {exportMessage}
-              </p>
-            ) : null}
-          </section>
-        </main>
-      )}
     </div>
   );
 }
