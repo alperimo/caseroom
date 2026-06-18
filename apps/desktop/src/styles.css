@@ -2116,7 +2116,7 @@ textarea {
 
 .action-overlay-card {
   width: min(760px, calc(100% - 40px));
-  max-height: min(520px, calc(100% - 80px));
+  max-height: min(700px, calc(100% - 60px));
   overflow: auto;
   padding: 22px;
   border: 4px solid #2d211b;
