@@ -278,74 +278,36 @@ async function answerHistory(session: EncounterSession, prompt: string): Promise
 function answerAction(session: EncounterSession, action: ActionKind): EncounterSession {
   let next = addAction(session, action);
   if (action === "examine") {
-    if (session.examPerformed) {
-      return appendTurn(
-        next,
-        "patient",
-        "You already examined me. Is there something specific you want to go back to?",
-      );
-    }
-    return appendTurn(
-      next,
-      "patient",
-      `Exam findings available: ${session.scenario.hiddenCase.examFindings.join(" ")}`,
-    );
+    return next;
   }
   if (action === "order_test") {
-    if (session.testsOrdered > 0) {
-      return appendTurn(
-        next,
-        "patient",
-        "Those test results were already reviewed. What do they mean for me?",
-      );
-    }
-    return appendTurn(
-      next,
-      "patient",
-      `Results are back: ${session.scenario.hiddenCase.testResults.join(" ")}`,
-    );
+    return next;
   }
   if (action === "diagnose") {
     const hasEnoughEvidence =
       session.revealedTopics.length >= 2 || session.examPerformed || session.testsOrdered > 0;
-    next = setDiagnosis(
+    return setDiagnosis(
       next,
-      hasEnoughEvidence ? session.scenario.hiddenCase.diagnosis : "premature diagnosis attempt",
-    );
-    return appendTurn(
-      next,
-      "patient",
-      hasEnoughEvidence
-        ? "Thank you. Can you explain what you think is going on?"
-        : "That feels a bit fast. Can I tell you a little more before you decide?",
+      hasEnoughEvidence ? session.scenario.hiddenCase.diagnosis : "More history needed before diagnosis",
     );
   }
   if (action === "treatment_plan") {
     const urgentPlan = next.progress.needsUrgentEscalation;
-    next = setPlan(
+    return setPlan(
       next,
       urgentPlan
         ? "Urgent assessment and same-day escalation were explained to the patient."
         : "Initial management and follow-up were explained to the patient.",
     );
-    return appendTurn(
-      next,
-      "patient",
-      urgentPlan
-        ? "So you think I should be seen urgently today?"
-        : "That sounds clear. What should I watch out for?",
-    );
   }
   if (action === "safety_net") {
-    return appendTurn(
+    const safetyNetText = `Safety-net advice covered: ${session.scenario.hiddenCase.safetyNet.join(", ")}.`;
+    return setPlan(
       next,
-      "patient",
-      next.progress.needsUrgentEscalation
-        ? `Understood. If this gets worse before I am seen urgently, I should seek help immediately for ${session.scenario.hiddenCase.safetyNet.join(", ")}.`
-        : `Understood. I will seek urgent help if any of these happen: ${session.scenario.hiddenCase.safetyNet.join(", ")}.`,
+      session.planText ? `${session.planText} ${safetyNetText}` : safetyNetText,
     );
   }
-  return appendTurn(next, "patient", "Please go ahead.");
+  return next;
 }
 
 export async function generatePatientTurn(

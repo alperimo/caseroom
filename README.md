@@ -50,6 +50,12 @@ npm run test
 - Spoken patient replies now prefer an English system voice when one is available, but final voice quality still depends on the browser and OS speech-synthesis voices installed on the device.
 - No cloud services are required for the current demo path.
 
+## Voice quality notes
+
+CaseRoom currently uses the best available local English browser/OS voice for spoken patient replies. For better free local quality on macOS, install higher-quality English voices in `System Settings > Accessibility > Spoken Content > System Voice > Manage Voices...`, then restart the browser or Electron app. Recommended local voices to try first are `Samantha`, `Ava`, `Allison`, or any English `Premium` / `Enhanced` voice available on the machine.
+
+The current voice path is still browser speech synthesis. A future QVAC-native or dedicated local TTS adapter would be the right production upgrade for consistently natural patient speech across devices.
+
 ## QVAC bridge configuration
 
 Optional environment variables:

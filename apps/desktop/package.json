@@ -16,6 +16,7 @@
     "@caseroom/case-packs-medical-osce": "file:../../packages/case-packs/medical-osce",
     "@caseroom/qvac-runtime": "file:../../packages/qvac-runtime",
     "@caseroom/simulation-core": "file:../../packages/simulation-core",
+    "lucide-react": "^1.21.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "sql.js": "^1.13.0"

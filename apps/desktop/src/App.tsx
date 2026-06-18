@@ -1,4 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Activity,
+  Brain,
+  ClipboardList,
+  FileText,
+  Mic,
+  Send,
+  ShieldCheck,
+  Stethoscope,
+  TestTube2,
+  Volume2
+} from "lucide-react";
 import { medicalCasePack } from "@caseroom/case-packs-medical-osce";
 import {
   buildDebriefHighlights,
@@ -30,6 +42,50 @@ import { saveEvidenceArtifact } from "./exportArtifacts";
 
 type Screen = "lobby" | "brief" | "room" | "debrief";
 type DebriefRun = PersistedRun<ReturnType<typeof buildDebriefHighlights>>;
+type ClinicalFinding = {
+  title: string;
+  detail: string;
+};
+
+function getPatientInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function buildClinicalFindings(session: EncounterSession): ClinicalFinding[] {
+  const findings: ClinicalFinding[] = [];
+
+  if (session.examPerformed) {
+    findings.push({
+      title: "Exam",
+      detail: session.scenario.hiddenCase.examFindings.join(" ")
+    });
+  }
+  if (session.testsOrdered > 0) {
+    findings.push({
+      title: "Results",
+      detail: session.scenario.hiddenCase.testResults.join(" ")
+    });
+  }
+  if (session.diagnosisText) {
+    findings.push({
+      title: "Impression",
+      detail: session.diagnosisText
+    });
+  }
+  if (session.planText) {
+    findings.push({
+      title: "Plan",
+      detail: session.planText
+    });
+  }
+
+  return findings;
+}
 
 export function App() {
   const initialRuntime = useMemo(
@@ -52,6 +108,8 @@ export function App() {
   const [exportState, setExportState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const voiceControllerRef = useRef<VoiceCaptureController | null>(null);
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const promptInputRef = useRef<HTMLTextAreaElement | null>(null);
   const historyRef = useRef<DebriefRun[]>([]);
   const lastDraftSignatureRef = useRef<string | null>(null);
   const warmupAttemptedRef = useRef(false);
@@ -167,6 +225,15 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (screen !== "room") {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      transcriptEndRef.current?.scrollIntoView({ block: "end" });
+    });
+  }, [screen, session?.transcript.length]);
+
+  useEffect(() => {
     if (!session || (screen !== "brief" && screen !== "room")) {
       return;
     }
@@ -280,6 +347,10 @@ export function App() {
     if (!session) {
       return;
     }
+    if (kind === "history") {
+      promptInputRef.current?.focus();
+      return;
+    }
     const response = await generatePatientTurn(session, "", kind);
     setSession(response.session);
   }
@@ -387,6 +458,10 @@ export function App() {
     setExportState("idle");
     setExportMessage(null);
   }
+
+  const latestPatientTurn = session?.transcript.slice().reverse().find((turn) => turn.speaker === "patient");
+  const latestClinicianTurn = session?.transcript.slice().reverse().find((turn) => turn.speaker === "clinician");
+  const clinicalFindings = session ? buildClinicalFindings(session) : [];
 
   return (
     <div className="app-shell">
@@ -564,63 +639,95 @@ export function App() {
       )}
 
       {screen === "room" && selectedCase && session && (
-        <main className="room-grid">
-          <section className="card room-scene">
-            <div className="scene-banner">
-              <p className="eyebrow">In Room</p>
-              <span className="status-pill neutral">
-                {selectedCase.hiddenCase.patientAffect}
-              </span>
-            </div>
-            <div className="patient-summary-card">
+        <main className="simulation-room">
+          <section className="room-stage" aria-label="Consultation room">
+            <div className="room-topline">
               <div>
-                <p className="eyebrow">Patient</p>
-                <h2>{selectedCase.brief.patientName}</h2>
-                <p className="lead">{selectedCase.brief.chiefComplaint}</p>
+                <p className="eyebrow">In Room</p>
+                <h2>{selectedCase.title}</h2>
               </div>
               <div className="room-meta-row">
                 <span className={`status-pill risk-${session.progress.riskLevel}`}>
                   Risk {session.progress.riskLevel}
                 </span>
-                <span className="status-pill neutral">{session.progress.remainingMinutes} min left</span>
-                <span className="status-pill neutral">{session.actionLog.length} actions logged</span>
+                <span className="status-pill neutral">{session.progress.remainingMinutes} min</span>
+                <span className="status-pill neutral">{Math.round(session.progress.completionRatio * 100)}%</span>
               </div>
             </div>
-            <div className="room-support-grid">
-              <div className="monitor-panel">
-                <strong>Vitals</strong>
-                <div className="vitals-grid">
-                  <span>HR {selectedCase.brief.visibleVitals.hr}</span>
-                  <span>BP {selectedCase.brief.visibleVitals.bp}</span>
-                  <span>RR {selectedCase.brief.visibleVitals.rr}</span>
-                  <span>SpO2 {selectedCase.brief.visibleVitals.spo2}</span>
+
+            <div className="scene-canvas">
+              <div className="scene-back-wall" />
+              <div className="scene-floor" />
+              <div className="ceiling-light" />
+              <div className="exam-bed" />
+              <div className="wall-board">
+                <span>{selectedCase.specialty}</span>
+                <strong>{session.progress.stateLabel}</strong>
+              </div>
+              <div className="vitals-monitor">
+                <div className="monitor-title">
+                  <Activity size={16} />
+                  <span>Vitals</span>
                 </div>
+                <strong>HR {selectedCase.brief.visibleVitals.hr}</strong>
+                <strong>BP {selectedCase.brief.visibleVitals.bp}</strong>
+                <strong>SpO2 {selectedCase.brief.visibleVitals.spo2}</strong>
+                <strong>RR {selectedCase.brief.visibleVitals.rr}</strong>
               </div>
-              <div className="patient-panel">
-                <strong>Patient state</strong>
-                <p>{session.latestPatientMood}</p>
-                <span className="voice-indicator">{productizeStatusLabel(runtime.voiceMode)}</span>
-                {voiceError ? <p className="voice-error">{voiceError}</p> : null}
+              <div className="patient-bubble">
+                <span>{selectedCase.brief.patientName}</span>
+                <p>{latestPatientTurn?.text ?? selectedCase.brief.chiefComplaint}</p>
               </div>
-              <div className="desk-panel">
-                <strong>Next focus</strong>
-                <p>{session.progress.stateLabel}</p>
-                <span className="status-pill neutral">
-                  {Math.round(session.progress.completionRatio * 100)}% complete
-                </span>
+              <div className="patient-avatar" aria-label={selectedCase.brief.patientName}>
+                <div className="avatar-head">
+                  <span>{getPatientInitials(selectedCase.brief.patientName)}</span>
+                </div>
+                <div className="avatar-body" />
+                <div className="avatar-chair" />
               </div>
+              <div className="desk-table">
+                <FileText size={20} />
+                <span>Chart</span>
+              </div>
+              <div className="chart-tablet">
+                <span>{selectedCase.brief.patientName}</span>
+                <strong>{selectedCase.brief.age} years</strong>
+                <p>{selectedCase.brief.chiefComplaint}</p>
+              </div>
+            </div>
+
+            <div className="room-command-bar">
+              {(
+                [
+                  ["history", "Ask", Mic],
+                  ["examine", "Exam", Stethoscope],
+                  ["order_test", "Tests", TestTube2],
+                  ["diagnose", "Impression", Brain],
+                  ["treatment_plan", "Plan", ClipboardList],
+                  ["safety_net", "Safety", ShieldCheck]
+                ] as const
+              ).map(([kind, label, Icon]) => (
+                <button key={kind} className="tool-button" onClick={() => runAction(kind)} type="button">
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </button>
+              ))}
+              <button className="end-button" onClick={endEncounter} type="button">
+                End encounter
+              </button>
             </div>
           </section>
 
-          <section className="card transcript-panel">
-            <div className="section-header">
+          <section className="conversation-dock">
+            <div className="dock-header">
               <div>
                 <p className="eyebrow">Live Conversation</p>
-                <h2>{selectedCase.title}</h2>
+                <h2>{selectedCase.brief.patientName}</h2>
               </div>
-              <button className="ghost-button" onClick={endEncounter}>
-                End encounter
-              </button>
+              <span className="voice-indicator">
+                <Volume2 size={15} />
+                {productizeStatusLabel(runtime.voiceMode)}
+              </span>
             </div>
 
             <div className="transcript-log">
@@ -630,15 +737,17 @@ export function App() {
                   <p>{turn.text}</p>
                 </article>
               ))}
+              <div ref={transcriptEndRef} />
             </div>
 
             <div className="composer">
               <label htmlFor="prompt">Ask the patient</label>
               <textarea
                 id="prompt"
+                ref={promptInputRef}
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder="Ask about symptoms, risk factors, what changed, or explain your plan."
+                placeholder="Ask a focused question or explain your next step."
               />
               <div className="composer-actions">
                 <button
@@ -646,66 +755,67 @@ export function App() {
                   onClick={toggleVoiceCapture}
                   type="button"
                 >
+                  <Mic size={18} />
                   {voiceState === "listening"
-                    ? "Stop listening"
+                    ? "Stop"
                     : voiceState === "processing"
-                      ? "Listening..."
-                      : "Use microphone"}
+                      ? "Listening"
+                      : "Voice"}
                 </button>
                 <button className="primary-button" onClick={sendPrompt} type="button">
+                  <Send size={18} />
                   Send
                 </button>
               </div>
-              <p className="muted">Type freely or switch to voice when microphone access is available.</p>
+              {voiceError ? <p className="voice-error">{voiceError}</p> : null}
             </div>
           </section>
 
-          <aside className="card chart-panel">
+          <aside className="record-dock">
             <p className="eyebrow">Patient Record</p>
-            <h2>Clinical actions</h2>
-            <div className="action-stack">
-              {(
-                [
-                  ["history", "Ask follow-up"],
-                  ["examine", "Examine patient"],
-                  ["order_test", "Review tests"],
-                  ["diagnose", "Record impression"],
-                  ["treatment_plan", "Explain plan"],
-                  ["safety_net", "Give safety net"]
-                ] as const
-              ).map(([kind, label]) => (
-                <button key={kind} className="secondary-button" onClick={() => runAction(kind)}>
-                  {label}
-                </button>
-              ))}
+            <div className="record-person">
+              <div className="record-avatar">{getPatientInitials(selectedCase.brief.patientName)}</div>
+              <div>
+                <h2>{selectedCase.brief.patientName}</h2>
+                <p>{selectedCase.brief.age} years · {selectedCase.specialty}</p>
+              </div>
             </div>
 
-            <div className="notes-box">
-              <h3>Focus prompts</h3>
-              <ul className="compact-list">
-                {selectedCase.hiddenCase.mustAsk.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
+            <div className="record-vitals">
+              <span>HR {selectedCase.brief.visibleVitals.hr}</span>
+              <span>BP {selectedCase.brief.visibleVitals.bp}</span>
+              <span>SpO2 {selectedCase.brief.visibleVitals.spo2}</span>
+              <span>Temp {selectedCase.brief.visibleVitals.temp}</span>
             </div>
 
-            <div className="notes-box">
-              <h3>Clinical focus</h3>
-              <ul className="compact-list">
-                <li>Next focus: {session.progress.stateLabel}</li>
-                <li>Remaining time: {session.progress.remainingMinutes} minutes</li>
-                <li>Encounter progress: {Math.round(session.progress.completionRatio * 100)}%</li>
-                <li>Key areas still open: {session.progress.missingCriticalTopics.length}</li>
-              </ul>
-              {session.progress.escalationReasons.length > 0 ? (
-                <ul className="compact-list">
-                  {session.progress.escalationReasons.slice(0, 3).map((reason) => (
-                    <li key={reason}>{reason}</li>
+            <div className="record-section">
+              <h3>Clinical findings</h3>
+              {clinicalFindings.length === 0 ? (
+                <p className="muted">No exam or test findings recorded yet.</p>
+              ) : (
+                <ul className="finding-list">
+                  {clinicalFindings.map((finding) => (
+                    <li key={finding.title}>
+                      <strong>{finding.title}</strong>
+                      <span>{finding.detail}</span>
+                    </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="muted">No urgent escalation flags surfaced yet.</p>
               )}
+            </div>
+
+            <div className="record-section">
+              <h3>Focus</h3>
+              <div className="focus-chip-list">
+                {selectedCase.hiddenCase.mustAsk.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="record-section">
+              <h3>Last question</h3>
+              <p>{latestClinicianTurn?.text ?? "Start with a focused opening question."}</p>
             </div>
           </aside>
         </main>
