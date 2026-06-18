@@ -203,7 +203,7 @@ function getActionStatus(session: EncounterSession, kind: ActionKind): ActionSta
   if (kind === "history") {
     return session.progress.missingCriticalTopics.length === 0
       ? { state: "done", label: "covered" }
-      : { state: "needs", label: `${session.progress.missingCriticalTopics.length} gaps` };
+      : { state: "needs", label: `${session.progress.missingCriticalTopics.length} left` };
   }
   if (kind === "examine") {
     return session.examPerformed ? { state: "done", label: "done" } : { state: "ready", label: "ready" };
@@ -778,9 +778,9 @@ export function App() {
                   <h3>{scenario.title}</h3>
                   <p>{scenario.brief.chiefComplaint}</p>
                   <div className="case-tags">
-                    {scenario.hiddenCase.redFlags.slice(0, 3).map((flag) => (
-                      <span key={flag}>{flag}</span>
-                    ))}
+                    <span>{scenario.brief.age} years old</span>
+                    <span>{scenario.brief.timerMinutes ?? (scenario.difficulty === "easy" ? 12 : scenario.difficulty === "medium" ? 10 : 8)} mins</span>
+                    <span>{scenario.hiddenCase.mustAsk.length} history topics</span>
                   </div>
                   <span className="case-cta">
                     Open room
@@ -1049,11 +1049,12 @@ export function App() {
                 <strong>SpO2 {selectedCase.brief.visibleVitals.spo2}</strong>
                 <strong>RR {selectedCase.brief.visibleVitals.rr}</strong>
               </div>
-              <div className="patient-bubble">
-                <span>{selectedCase.brief.patientName}</span>
-                <p>{latestPatientTurn?.text ?? selectedCase.brief.chiefComplaint}</p>
-              </div>
-              <div className="patient-avatar" aria-label={selectedCase.brief.patientName}>
+              <div className={`patient-avatar patient-${selectedCase.id}`} aria-label={selectedCase.brief.patientName}>
+                <div className="patient-bubble">
+                  <span>{selectedCase.brief.patientName}</span>
+                  <p>{latestPatientTurn?.text ?? selectedCase.brief.chiefComplaint}</p>
+                </div>
+                <div className="avatar-hair" />
                 <div className="avatar-head">
                   <span>{getPatientInitials(selectedCase.brief.patientName)}</span>
                 </div>

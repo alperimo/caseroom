@@ -340,7 +340,7 @@ function shouldCorrectToken(token: string, candidate: string): boolean {
 }
 
 function normalizeMedicalTranscript(text: string, contextPhrases: string[] = []): string {
-  const terms = uniquePhrases(contextPhrases.flatMap(expandClinicalPhrase))
+  const terms = uniquePhrases(contextPhrases.flatMap((phrase) => expandClinicalPhrase(phrase)))
     .filter((term) => /^[a-z0-9]+$/i.test(term) && term.length >= 4);
   if (terms.length === 0) {
     return text;
