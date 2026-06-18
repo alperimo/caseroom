@@ -1,0 +1,12 @@
+{
+  "name": "@caseroom/qvac-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node ./server.mjs"
+  },
+  "dependencies": {
+    "@qvac/sdk": "^0.13.3"
+  }
+}

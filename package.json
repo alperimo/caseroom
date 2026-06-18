@@ -1,0 +1,23 @@
+{
+  "name": "caseroom",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n runtime,web,electron \"npm run dev:runtime\" \"npm run dev:web\" \"npm run dev:electron\"",
+    "dev:web": "npm run dev --workspace @caseroom/desktop",
+    "dev:runtime": "npm run dev --workspace @caseroom/qvac-runtime",
+    "dev:electron": "npm run dev:electron --workspace @caseroom/desktop",
+    "build": "npm run build --workspace @caseroom/desktop",
+    "lint": "npm run lint --workspace @caseroom/desktop",
+    "typecheck": "npm run typecheck --workspace @caseroom/desktop",
+    "test": "vitest run packages/simulation-core/src/index.test.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "vitest": "^3.2.4"
+  }
+}

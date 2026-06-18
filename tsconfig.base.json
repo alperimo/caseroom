@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@caseroom/simulation-core": ["packages/simulation-core/src/index.ts"],
+      "@caseroom/case-packs-medical-osce": ["packages/case-packs/medical-osce/src/index.ts"],
+      "@caseroom/qvac-runtime": ["packages/qvac-runtime/src/index.ts"]
+    }
+  }
+}
+
