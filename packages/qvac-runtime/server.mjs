@@ -357,6 +357,7 @@ function buildSystemPrompt(session) {
     "Do not combine unrelated facts into an examiner-style recap. Speak like a real patient with limited medical knowledge.",
     "Do not volunteer the diagnosis.",
     "Do not mention hidden labels such as UTI, ACS, anemia, diagnosis, differential, rubric, or red flags unless the clinician explicitly asks what they should worry about as a patient.",
+    "If the clinician tells you a diagnosis, explains a condition, or suggests what you might have, react naturally as a patient hearing this information: express surprise, concern, or ask what that means in simple terms. Do not act like you already understand the medical details of the condition, and stay true to your character's affect.",
     "Only reveal facts that are consistent with the case truth table and only when the clinician asks something relevant.",
     "Answer the clinician's latest question directly. If it matches a truth-table topic, use that fact in the first sentence.",
     "If asked about a listed topic, answer using the matching fact. If asked about something unrelated, stay uncertain and redirect politely.",
@@ -393,10 +394,6 @@ async function generatePatientReply(session, prompt) {
     return `My name is ${session.scenario.brief.patientName}.`;
   }
 
-  if (/\b(pcos|polycystic ovary|you have|you've got|you may have|i think you have|diagnos(?:e|is))\b/i.test(prompt)) {
-    return "I didn't know that. Could you explain what that means for me?";
-  }
-
   const readyModelId = await ensureModelLoaded();
   const run = completion({
     modelId: readyModelId,
@@ -419,13 +416,33 @@ function sanitizePatientReply(reply, session) {
   const examinerRecapLeak = /\b(no fever|flank pain|medication allergies|red flags|differential|diagnosis|rubric|checklist)\b.*\b(next step|what'?s next|what would you)\b/i;
   const otherDoctorLeak = /\b(my doctor|the doctor|a doctor|gp|specialist|consultant)\s+(told|said|says|has told|has been told|explained|diagnosed)\b/i;
   if (roleLeak.test(singleLine) || evaluatorLeak.test(singleLine)) {
-    return `My name is ${session.scenario.brief.patientName}.`;
+    const turnIndex = session.transcript ? session.transcript.length : 0;
+    const nameFallbacks = [
+      `My name is ${session.scenario.brief.patientName}.`,
+      `I'm ${session.scenario.brief.patientName}, doctor.`,
+      `I am ${session.scenario.brief.patientName}.`
+    ];
+    return nameFallbacks[turnIndex % nameFallbacks.length];
   }
   if (coachingLeak.test(singleLine) || examinerRecapLeak.test(singleLine)) {
-    return `I'm still uncomfortable, doctor. ${session.scenario.brief.chiefComplaint}`;
+    const turnIndex = session.transcript ? session.transcript.length : 0;
+    const coachingFallbacks = [
+      `I'm still uncomfortable, doctor. ${session.scenario.brief.chiefComplaint}`,
+      `I'm just really worried about my symptoms. ${session.scenario.brief.chiefComplaint}`,
+      `I'm still feeling uneasy. ${session.scenario.brief.chiefComplaint}`
+    ];
+    return coachingFallbacks[turnIndex % coachingFallbacks.length];
   }
   if (otherDoctorLeak.test(singleLine)) {
-    return "I didn't know that. Could you explain what that means for me?";
+    const turnIndex = session.transcript ? session.transcript.length : 0;
+    const fallbacks = [
+      `I'm not sure, doctor. I'm just really concerned about this: ${session.scenario.brief.chiefComplaint}`,
+      `Oh, I see. What does that mean for me?`,
+      `I don't know much about that, doctor. Is it serious?`,
+      `Okay, doctor. How do we treat this?`,
+      `Sorry doctor, I might have got confused. Could you explain what we should do next?`
+    ];
+    return fallbacks[turnIndex % fallbacks.length];
   }
   return singleLine;
 }
@@ -571,15 +588,16 @@ const server = http.createServer(async (request, response) => {
           .filter(Boolean)
           .slice(0, 80)
         : [];
+      const asrPromptBase = "A medical consultation between a doctor and a patient. The doctor asks: Do you have any chest pain, shortness of breath, sweating, or radiation to your arm? How is your heart? Do you feel tired, or have heavy periods? Is there any burning urination, fever, flank pain, or ankle swelling? Tell me about your medical history, tablets, medication, and allergies.";
       const lexicalHint = contextPhrases.length > 0
-        ? ` Likely clinical terms in this case: ${contextPhrases.join(", ")}.`
+        ? ` Words you might hear: ${contextPhrases.join(", ")}.`
         : "";
       const readyAsrModelId = await ensureAsrModelLoaded();
       const audioChunk = Buffer.from(audioBase64, "base64");
       const text = await transcribe({
         modelId: readyAsrModelId,
         audioChunk,
-        prompt: `English medical consultation. Transcribe only the clinician's spoken words.${lexicalHint}`
+        prompt: `${asrPromptBase}${lexicalHint}`
       });
       const transcript = String(text ?? "").replace(/\s+/g, " ").trim();
       sendJson(response, 200, {

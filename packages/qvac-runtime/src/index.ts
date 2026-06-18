@@ -410,14 +410,13 @@ function answerHistoryFallback(session: EncounterSession, prompt: string): Encou
 }
 
 async function answerHistory(session: EncounterSession, prompt: string): Promise<EncounterSession> {
-  const normalizedPrompt = normalizePromptForScenario(session, prompt);
   try {
     const response = await fetch(`${resolveRuntimeUrl()}/patient-turn`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ session, prompt: normalizedPrompt })
+      body: JSON.stringify({ session, prompt })
     });
 
     if (!response.ok) {
@@ -429,10 +428,10 @@ async function answerHistory(session: EncounterSession, prompt: string): Promise
       throw new Error("Runtime returned an empty reply.");
     }
 
-    const next = applyPromptSignals(session, normalizedPrompt);
+    const next = applyPromptSignals(session, prompt);
     return addAction(appendTurn(next, "patient", payload.reply), "history");
   } catch {
-    return answerHistoryFallback(session, normalizedPrompt);
+    return answerHistoryFallback(session, prompt);
   }
 }
 
@@ -711,7 +710,7 @@ async function transcribeAudioBlob(audioBlob: Blob, options: VoiceCaptureOptions
     throw new Error(payload.error ?? `QVAC ASR failed with ${response.status}.`);
   }
   const payload = (await response.json()) as { text?: string };
-  const text = normalizeMedicalTranscript(payload.text?.trim() ?? "", contextPhrases).trim();
+  const text = (payload.text?.trim() ?? "").trim();
   if (!isMeaningfulTranscript(text)) {
     options.onError?.("I couldn't hear speech clearly. Try again a little closer to the microphone, or type the sentence.");
     return;
