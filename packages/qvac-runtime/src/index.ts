@@ -67,27 +67,7 @@ export type VoiceCaptureOptions = {
   onStateChange?: (state: "idle" | "listening" | "processing") => void;
 };
 
-const clinicalConceptExpansions: Record<string, string[]> = {
-  radiation: ["radiate", "radiates", "radiating", "spread", "spreads", "spreading", "go to", "going to", "travel", "travels", "traveling", "shoot", "shoots", "shooting", "left arm", "neck", "jaw", "back"],
-  sweating: ["sweat", "sweats", "sweaty", "clammy", "perspire", "perspiring", "perspiration", "diaphoresis", "diaphoretic", "drenched"],
-  "cardiac history": ["heart", "cardiac", "coronary", "angina", "infarction", "stroke", "cholesterol", "heart attack", "family history", "father", "mother", "dad", "mom", "parents"],
-  "shortness of breath": ["breath", "breathing", "breathless", "short of breath", "sob", "dyspnea", "winded", "gasping", "stairs", "climbing"],
-  pregnancy: ["pregnant", "pregnancy", "contraception", "period", "periods", "menstruation", "last period", "childbearing"],
-  fever: ["temperature", "temp", "feverish", "hot", "chills", "sweating", "sweats", "pyrexia"],
-  "flank pain": ["back pain", "side pain", "kidney pain", "loin pain", "flank", "back", "sides"],
-  allergies: ["allergy", "allergic", "reaction", "reactions", "side effect", "side effects", "penicillin", "antibiotic"],
-  duration: ["long", "start", "started", "begin", "began", "since when", "how long", "weeks", "months", "days"],
-  clots: ["clot", "clots", "clotting", "pieces", "lumps", "coagulate"],
-  diet: ["eat", "eating", "food", "meat", "vegetarian", "vegan", "nutrition", "meals", "appetite"],
-  "vision changes": ["blur", "blurry", "blurred", "double vision", "eyes", "eyesight", "sight", "seeing", "vision"],
-  "chest pain": ["angina", "pain", "tightness", "pressure", "heavy", "heaviness", "squeeze", "squeezing", "chest"],
-  "neurological symptoms": ["weakness", "numbness", "tingling", "speech", "talking", "paralysis", "stroke", "dizzy", "dizziness", "confusion"],
-  "medication adherence": ["tablets", "pills", "meds", "medicine", "prescriptions", "regularly", "taking", "stopped", "forgot"],
-  orthopnea: ["pillows", "propped up", "flat", "lying down", "sleep", "upright"],
-  "leg swelling": ["ankles", "legs", "swollen", "puffy", "edema", "fluid", "swelling"],
-  cough: ["coughing", "phlegm", "mucus", "sputum", "cough"],
-  "smoking history": ["smoke", "smoking", "cigarettes", "tobacco", "pack", "vape", "vaping", "quit"]
-};
+
 
 export function getRuntimeStatus(): RuntimeStatus {
   const voiceSupport = getVoiceRuntimeSupport();
@@ -255,14 +235,14 @@ function uniquePhrases(values: string[]): string[] {
   return [...new Set(values.map(normalizeLexiconPhrase).filter(Boolean))];
 }
 
-function expandClinicalPhrase(phrase: string): string[] {
+function expandClinicalPhrase(phrase: string, synonyms: Record<string, string[]> = {}): string[] {
   const normalized = normalizeLexiconPhrase(phrase);
   const words = normalized.split(" ").filter(Boolean);
   const expanded = new Set<string>([normalized]);
 
   const stopwords = new Set(["of", "and", "the", "or", "any", "your", "have", "with", "about", "after", "at", "in", "on", "to", "for", "is", "was", "am", "are", "do", "you", "my", "me", "has", "had", "been"]);
 
-  for (const [concept, alternatives] of Object.entries(clinicalConceptExpansions)) {
+  for (const [concept, alternatives] of Object.entries(synonyms)) {
     if (normalized === concept || alternatives.includes(normalized)) {
       expanded.add(concept);
       alternatives.forEach((alternative) => expanded.add(alternative));
@@ -283,7 +263,7 @@ function expandClinicalPhrase(phrase: string): string[] {
       }
     }
 
-    for (const [concept, alternatives] of Object.entries(clinicalConceptExpansions)) {
+    for (const [concept, alternatives] of Object.entries(synonyms)) {
       if (word === concept || alternatives.includes(word)) {
         expanded.add(concept);
         alternatives.forEach((alternative) => expanded.add(alternative));
@@ -299,6 +279,7 @@ function expandClinicalPhrase(phrase: string): string[] {
 
 function buildScenarioLexicon(session: EncounterSession): string[] {
   const hidden = session.scenario.hiddenCase;
+  const synonyms = hidden.synonyms ?? {};
   const truthKeys = Object.keys(hidden.truthTable);
   const values = [
     ...hidden.mustAsk,
@@ -310,7 +291,7 @@ function buildScenarioLexicon(session: EncounterSession): string[] {
     session.scenario.brief.chiefComplaint,
     hidden.diagnosis
   ];
-  return uniquePhrases(values.flatMap(expandClinicalPhrase));
+  return uniquePhrases(values.flatMap((phrase) => expandClinicalPhrase(phrase, synonyms)));
 }
 
 export function buildVoiceContextPhrases(session: EncounterSession): string[] {
@@ -373,8 +354,9 @@ function normalizeMedicalTranscript(text: string, contextPhrases: string[] = [])
 }
 
 function promptMentionsTopic(prompt: string, topic: string, session: EncounterSession): boolean {
+  const synonyms = session.scenario.hiddenCase.synonyms ?? {};
   const lowered = normalizeMedicalTranscript(prompt, buildScenarioLexicon(session)).toLowerCase();
-  return expandClinicalPhrase(topic).some((alias) => {
+  return expandClinicalPhrase(topic, synonyms).some((alias) => {
     const escaped = alias.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp(`\\b${escaped}\\b`, "i").test(lowered);
   });

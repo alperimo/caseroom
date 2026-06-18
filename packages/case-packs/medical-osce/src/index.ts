@@ -26,7 +26,13 @@ export const medicalCasePack: MedicalScenario[] = [
       },
       examFindings: ["Soft non-tender abdomen.", "No costovertebral-angle tenderness."],
       testResults: ["Urine dip: positive leukocytes and nitrites."],
-      safetyNet: ["fever", "vomiting", "worsening pain", "new back pain"]
+      safetyNet: ["fever", "vomiting", "worsening pain", "new back pain"],
+      synonyms: {
+        pregnancy: ["pregnant", "pregnancy", "contraception", "period", "periods", "menstruation", "last period", "childbearing"],
+        fever: ["temperature", "temp", "feverish", "hot", "chills", "sweating", "sweats", "pyrexia"],
+        "flank pain": ["back pain", "side pain", "kidney pain", "loin pain", "flank", "back", "sides"],
+        allergies: ["allergy", "allergic", "reaction", "reactions", "side effect", "side effects", "penicillin", "antibiotic"]
+      }
     },
     rubric: { communication: 20, history: 30, clinicalReasoning: 30, safety: 20 },
     localCitations: [
@@ -67,7 +73,13 @@ export const medicalCasePack: MedicalScenario[] = [
       },
       examFindings: ["Patient appears clammy.", "No focal chest wall tenderness."],
       testResults: ["ECG: anterior ST-segment depression.", "Troponin pending."],
-      safetyNet: ["worsening pain", "collapse", "sudden breathlessness", "persistent pressure"]
+      safetyNet: ["worsening pain", "collapse", "sudden breathlessness", "persistent pressure"],
+      synonyms: {
+        radiation: ["radiate", "radiates", "radiating", "spread", "spreads", "spreading", "go to", "going to", "travel", "travels", "traveling", "shoot", "shoots", "shooting", "left arm", "neck", "jaw", "back"],
+        sweating: ["sweat", "sweats", "sweaty", "clammy", "perspire", "perspiring", "perspiration", "diaphoresis", "diaphoretic", "drenched"],
+        "cardiac history": ["heart", "cardiac", "coronary", "angina", "infarction", "stroke", "cholesterol", "heart attack", "family history", "father", "mother", "dad", "mom", "parents"],
+        "shortness of breath": ["breath", "breathing", "breathless", "short of breath", "sob", "dyspnea", "winded", "gasping", "stairs", "climbing"]
+      }
     },
     rubric: { communication: 20, history: 30, clinicalReasoning: 30, safety: 20 },
     localCitations: [
@@ -108,7 +120,13 @@ export const medicalCasePack: MedicalScenario[] = [
       },
       examFindings: ["Looks pale but well perfused.", "No abdominal tenderness."],
       testResults: ["FBC: microcytic anemia, Hb 9.4 g/dL.", "Ferritin low."],
-      safetyNet: ["fainting", "chest pain", "bleeding getting much heavier", "breathlessness at rest"]
+      safetyNet: ["fainting", "chest pain", "bleeding getting much heavier", "breathlessness at rest"],
+      synonyms: {
+        duration: ["long", "start", "started", "begin", "began", "since when", "how long", "weeks", "months", "days"],
+        clots: ["clot", "clots", "clotting", "pieces", "lumps", "coagulate"],
+        pregnancy: ["pregnant", "pregnancy", "contraception", "period", "periods", "menstruation", "last period", "childbearing"],
+        diet: ["eat", "eating", "food", "meat", "vegetarian", "vegan", "nutrition", "meals", "appetite"]
+      }
     },
     rubric: { communication: 25, history: 30, clinicalReasoning: 25, safety: 20 },
     localCitations: [
@@ -149,7 +167,13 @@ export const medicalCasePack: MedicalScenario[] = [
       },
       examFindings: ["Alert and oriented.", "No focal neurological deficit on brief examination."],
       testResults: ["Repeat BP remains severely elevated.", "Urine dip: no protein, no blood."],
-      safetyNet: ["new chest pain", "confusion", "weakness", "visual loss"]
+      safetyNet: ["new chest pain", "confusion", "weakness", "visual loss"],
+      synonyms: {
+        "vision changes": ["blur", "blurry", "blurred", "double vision", "eyes", "eyesight", "sight", "seeing", "vision"],
+        "chest pain": ["angina", "pain", "tightness", "pressure", "heavy", "heaviness", "squeeze", "squeezing", "chest"],
+        "neurological symptoms": ["weakness", "numbness", "tingling", "speech", "talking", "paralysis", "stroke", "dizzy", "dizziness", "confusion"],
+        "medication adherence": ["tablets", "pills", "meds", "medicine", "prescriptions", "regularly", "taking", "stopped", "forgot"]
+      }
     },
     rubric: { communication: 20, history: 30, clinicalReasoning: 30, safety: 20 },
     localCitations: [
@@ -190,7 +214,13 @@ export const medicalCasePack: MedicalScenario[] = [
       },
       examFindings: ["Mild bilateral ankle edema.", "Fine bibasal crackles."],
       testResults: ["Chest X-ray report: mild pulmonary vascular congestion.", "BNP elevated."],
-      safetyNet: ["worsening breathlessness", "chest pain", "fainting", "blue lips"]
+      safetyNet: ["worsening breathlessness", "chest pain", "fainting", "blue lips"],
+      synonyms: {
+        orthopnea: ["pillows", "propped up", "flat", "lying down", "sleep", "upright"],
+        "leg swelling": ["ankles", "legs", "swollen", "puffy", "edema", "fluid", "swelling"],
+        cough: ["coughing", "phlegm", "mucus", "sputum", "cough"],
+        "smoking history": ["smoke", "smoking", "cigarettes", "tobacco", "pack", "vape", "vaping", "quit"]
+      }
     },
     rubric: { communication: 20, history: 30, clinicalReasoning: 30, safety: 20 },
     localCitations: [

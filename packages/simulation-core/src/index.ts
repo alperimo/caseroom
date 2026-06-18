@@ -48,6 +48,7 @@ export type MedicalScenario = {
     examFindings: string[];
     testResults: string[];
     safetyNet: string[];
+    synonyms?: Record<string, string[]>;
   };
   rubric: {
     communication: number;
