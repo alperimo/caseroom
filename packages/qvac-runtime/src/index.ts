@@ -460,15 +460,21 @@ function answerAction(session: EncounterSession, action: ActionKind): EncounterS
   }
   if (action === "treatment_plan") {
     const urgentPlan = next.progress.needsUrgentEscalation;
+    const basePlan = urgentPlan
+      ? "Urgent assessment and same-day escalation were explained to the patient."
+      : "Initial management and follow-up were explained to the patient.";
+    const hasSafetyNet = session.planText?.includes("Safety-net advice covered:");
+    const safetyNetText = `Safety-net advice covered: ${session.scenario.hiddenCase.safetyNet.join(", ")}.`;
     return setPlan(
       next,
-      urgentPlan
-        ? "Urgent assessment and same-day escalation were explained to the patient."
-        : "Initial management and follow-up were explained to the patient.",
+      hasSafetyNet ? `${basePlan} ${safetyNetText}` : basePlan,
     );
   }
   if (action === "safety_net") {
     const safetyNetText = `Safety-net advice covered: ${session.scenario.hiddenCase.safetyNet.join(", ")}.`;
+    if (session.planText?.includes("Safety-net advice covered:")) {
+      return next;
+    }
     return setPlan(
       next,
       session.planText ? `${session.planText} ${safetyNetText}` : safetyNetText,
