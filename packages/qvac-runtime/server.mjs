@@ -6,13 +6,15 @@ import {
   LLAMA_3_2_1B_INST_Q4_0,
   QWEN3_1_7B_INST_Q4,
   QWEN3_600M_INST_Q4,
+  TTS_EN_SUPERTONIC_Q8_0,
   completion,
   embed,
   loadModel,
   ragDeleteWorkspace,
   ragReindex,
   ragSaveEmbeddings,
-  ragSearch
+  ragSearch,
+  textToSpeech
 } from "@qvac/sdk";
 import { bundledRagDocuments, ragWorkspaceVersion } from "./rag-documents.mjs";
 
@@ -30,13 +32,46 @@ const supportedModels = {
 
 let modelId = null;
 let embeddingModelId = null;
+let ttsModelId = null;
 let modelLoadPromise = null;
 let embeddingLoadPromise = null;
+let ttsLoadPromise = null;
 let activeModelName = requestedModel;
 let lastLoadError = null;
 let ragStatus = "initializing";
 let ragReady = false;
 let lastRagError = null;
+let ttsReady = false;
+let lastTtsError = null;
+
+const ttsSampleRate = 44100;
+
+function createWavHeader(dataLength, sampleRate) {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataLength, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(dataLength, 40);
+  return header;
+}
+
+function int16ArrayToBuffer(samples) {
+  const buffer = Buffer.alloc(samples.length * 2);
+  for (let index = 0; index < samples.length; index += 1) {
+    const value = Math.max(-32768, Math.min(32767, Math.round(samples[index] ?? 0)));
+    buffer.writeInt16LE(value, index * 2);
+  }
+  return buffer;
+}
 
 async function ensureModelLoaded() {
   if (modelId) {
@@ -109,6 +144,54 @@ async function ensureEmbeddingModelLoaded() {
   });
 
   return embeddingLoadPromise;
+}
+
+async function ensureTtsModelLoaded() {
+  if (ttsModelId) {
+    return ttsModelId;
+  }
+  if (ttsLoadPromise) {
+    return ttsLoadPromise;
+  }
+
+  ttsLoadPromise = (async () => {
+    try {
+      ttsModelId = await loadModel({
+        modelSrc: TTS_EN_SUPERTONIC_Q8_0,
+        modelConfig: {
+          ttsEngine: "supertonic",
+          language: "en",
+          voice: "F1",
+          ttsSpeed: 1.03,
+          ttsNumInferenceSteps: 5
+        },
+        onProgress: (progress) => {
+          console.log(`[qvac] loading Supertonic TTS: ${progress.percentage.toFixed(1)}%`);
+        }
+      });
+      ttsReady = true;
+      lastTtsError = null;
+      console.log(`[qvac] TTS ready (${ttsModelId})`);
+      return ttsModelId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const registeredMatch = message.match(/Model with ID "([^"]+)" is already registered/);
+      if (registeredMatch) {
+        ttsModelId = registeredMatch[1];
+        ttsReady = true;
+        lastTtsError = null;
+        return ttsModelId;
+      }
+      ttsReady = false;
+      lastTtsError = message;
+      ttsModelId = null;
+      throw error;
+    } finally {
+      ttsLoadPromise = null;
+    }
+  })();
+
+  return ttsLoadPromise;
 }
 
 async function loadRagManifest() {
@@ -201,7 +284,10 @@ function buildSystemPrompt(session) {
 
   return [
     "You are the patient in a medical OSCE simulation.",
-    "You are not the doctor and you must not volunteer the diagnosis.",
+    "You are only the patient. You are never the doctor, clinician, nurse, evaluator, tutor, assistant, or narrator.",
+    `Your name is ${session.scenario.brief.patientName}. If asked for your name, answer with that name and nothing about being a doctor.`,
+    "Do not say you are here to evaluate, examine, treat, diagnose, prescribe, or manage the clinician.",
+    "Do not volunteer the diagnosis.",
     "Do not mention hidden labels such as UTI, ACS, anemia, diagnosis, differential, rubric, or red flags unless the clinician explicitly asks what they should worry about as a patient.",
     "Only reveal facts that are consistent with the case truth table and only when the clinician asks something relevant.",
     "Answer the clinician's latest question directly. If it matches a truth-table topic, use that fact in the first sentence.",
@@ -231,6 +317,10 @@ function buildHistory(session, prompt) {
 }
 
 async function generatePatientReply(session, prompt) {
+  if (/\b(what'?s your name|what is your name|who are you|your name)\b/i.test(prompt)) {
+    return `My name is ${session.scenario.brief.patientName}.`;
+  }
+
   const readyModelId = await ensureModelLoaded();
   const run = completion({
     modelId: readyModelId,
@@ -238,14 +328,19 @@ async function generatePatientReply(session, prompt) {
     stream: false
   });
   const final = await run.final;
-  return sanitizePatientReply(String(final.contentText ?? ""));
+  return sanitizePatientReply(String(final.contentText ?? ""), session);
 }
 
-function sanitizePatientReply(reply) {
+function sanitizePatientReply(reply, session) {
   const withoutThinking = reply.replace(/<think>[\s\S]*?<\/think>/gi, " ");
   const singleLine = withoutThinking.replace(/\s+/g, " ").trim();
   if (!singleLine) {
     return "I am not sure how to answer that. Could you ask it a different way?";
+  }
+  const roleLeak = /\b(i am|i'm|my name is)\s+(dr\.?|doctor|clinician|nurse|professor|consultant)\b/i;
+  const evaluatorLeak = /\b(evaluate|examine|treat|diagnose|prescribe|manage)\s+you\b/i;
+  if (roleLeak.test(singleLine) || evaluatorLeak.test(singleLine)) {
+    return `My name is ${session.scenario.brief.patientName}.`;
   }
   return singleLine;
 }
@@ -342,7 +437,9 @@ const server = http.createServer(async (request, response) => {
       ragStatus,
       ragReady,
       lastRagError,
-      ragWorkspace
+      ragWorkspace,
+      ttsReady,
+      lastTtsError
     });
     return;
   }
@@ -350,6 +447,7 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "POST" && request.url === "/warmup") {
     try {
       await ensureModelLoaded();
+      void ensureTtsModelLoaded().catch(() => {});
       sendJson(response, 200, {
         ok: true,
         mode: "qvac",
@@ -364,6 +462,44 @@ const server = http.createServer(async (request, response) => {
         error: message,
         modelName: activeModelName,
         modelLoaded: false
+      });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/tts") {
+    try {
+      const body = await readJson(request);
+      const text = typeof body.text === "string" ? body.text.trim() : "";
+      if (!text) {
+        sendJson(response, 400, { error: "Text is required." });
+        return;
+      }
+
+      const readyTtsModelId = await ensureTtsModelLoaded();
+      const ttsResult = textToSpeech({
+        modelId: readyTtsModelId,
+        text,
+        inputType: "text",
+        stream: false
+      });
+      const samples = await ttsResult.buffer;
+      const audioData = int16ArrayToBuffer(samples);
+      const wavBuffer = Buffer.concat([createWavHeader(audioData.length, ttsSampleRate), audioData]);
+      sendJson(response, 200, {
+        ok: true,
+        mode: "qvac-tts",
+        mimeType: "audio/wav",
+        audioBase64: wavBuffer.toString("base64")
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      lastTtsError = message;
+      ttsReady = false;
+      sendJson(response, 500, {
+        ok: false,
+        mode: "browser-tts-fallback",
+        error: message
       });
     }
     return;

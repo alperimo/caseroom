@@ -1032,6 +1032,201 @@ textarea {
   font-size: 0.84rem;
 }
 
+.simulation-room-full {
+  max-width: min(1800px, calc(100vw - 48px));
+  min-height: calc(100vh - 118px);
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(680px, calc(100vh - 140px));
+}
+
+.simulation-room-full .room-stage {
+  padding: 18px;
+  gap: 12px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.simulation-room-full .scene-canvas {
+  min-height: 0;
+  height: 100%;
+  border-width: 3px;
+  border-radius: 24px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.simulation-room-full .vitals-monitor {
+  right: 18%;
+  bottom: 22%;
+  width: 230px;
+  z-index: 5;
+}
+
+.simulation-room-full .chart-tablet {
+  right: 3%;
+  bottom: 4%;
+  width: 198px;
+  z-index: 4;
+  transform: rotate(-4deg);
+}
+
+.simulation-room-full .patient-bubble {
+  top: 9%;
+  left: 43%;
+  width: min(430px, 32vw);
+  z-index: 8;
+}
+
+.simulation-room-full .patient-avatar {
+  left: 45%;
+  bottom: 18%;
+  transform: translateX(-50%) scale(1.06);
+}
+
+.simulation-room-full .desk-table {
+  left: 36.5%;
+  bottom: 13%;
+  z-index: 6;
+}
+
+.scene-record-overlay,
+.scene-chat-overlay,
+.room-command-bar {
+  position: absolute;
+  z-index: 12;
+  backdrop-filter: blur(18px);
+}
+
+.scene-record-overlay {
+  top: 18px;
+  right: 18px;
+  width: min(360px, 24vw);
+  max-height: calc(100% - 128px);
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 22px;
+  background: rgba(255, 250, 240, 0.82);
+  box-shadow: 0 16px 40px rgba(36, 25, 17, 0.16);
+}
+
+.scene-record-overlay .record-person {
+  align-items: flex-start;
+}
+
+.scene-record-overlay .record-person h2 {
+  font-size: 1.2rem;
+}
+
+.scene-record-overlay .record-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+}
+
+.record-vitals.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.record-vitals.compact span {
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(20, 49, 59, 0.08);
+  color: #14313b;
+  font-size: 0.86rem;
+}
+
+.scene-record-overlay .record-section {
+  gap: 8px;
+}
+
+.scene-record-overlay .record-section h3 {
+  margin: 0;
+}
+
+.scene-record-overlay .finding-list {
+  gap: 8px;
+}
+
+.scene-record-overlay .finding-list li {
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.scene-chat-overlay {
+  left: 18px;
+  bottom: 96px;
+  width: min(520px, 34vw);
+  max-height: min(520px, calc(100% - 138px));
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 18px 48px rgba(18, 45, 56, 0.18);
+}
+
+.scene-chat-overlay .dock-header h2 {
+  font-size: 1.35rem;
+}
+
+.scene-chat-overlay .voice-indicator {
+  white-space: nowrap;
+}
+
+.scene-chat-overlay .transcript-log {
+  flex: 1;
+  min-height: 160px;
+  max-height: min(260px, 32vh);
+  margin-top: 12px;
+  padding-right: 4px;
+}
+
+.scene-chat-overlay .turn {
+  max-width: 88%;
+  border: 1px solid rgba(20, 49, 59, 0.06);
+}
+
+.scene-chat-overlay .turn p {
+  font-size: 0.98rem;
+}
+
+.scene-chat-overlay .composer {
+  margin-top: 12px;
+}
+
+.scene-chat-overlay .composer textarea {
+  min-height: 78px;
+  max-height: 130px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.scene-chat-overlay .composer-actions {
+  gap: 10px;
+}
+
+.room-command-bar {
+  left: 50%;
+  bottom: 18px;
+  width: min(980px, calc(100% - 36px));
+  transform: translateX(-50%);
+  grid-template-columns: repeat(6, minmax(84px, 1fr)) auto;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  border-radius: 22px;
+  background: rgba(255, 250, 240, 0.84);
+  box-shadow: 0 16px 38px rgba(35, 24, 16, 0.2);
+}
+
+.room-command-bar .tool-button,
+.room-command-bar .end-button {
+  min-height: 46px;
+  border-radius: 14px;
+}
+
 @media (max-width: 1100px) {
   .hero-grid,
   .page-grid,
@@ -1047,6 +1242,24 @@ textarea {
   .record-dock {
     grid-column: auto;
     grid-row: auto;
+  }
+
+  .simulation-room-full {
+    max-width: calc(100vw - 28px);
+    grid-template-rows: minmax(760px, calc(100vh - 116px));
+  }
+
+  .scene-record-overlay {
+    width: min(340px, 38vw);
+  }
+
+  .scene-chat-overlay {
+    width: min(460px, 46vw);
+  }
+
+  .simulation-room-full .patient-bubble {
+    left: 36%;
+    width: min(480px, 48vw);
   }
 
   .panel-span-2 {
@@ -1083,11 +1296,21 @@ textarea {
   }
 
   .room-command-bar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: auto;
   }
 
   .end-button {
     grid-column: 1 / -1;
+  }
+
+  .simulation-room-full {
+    max-width: calc(100vw - 24px);
+    grid-template-rows: minmax(820px, auto);
+  }
+
+  .simulation-room-full .scene-canvas {
+    min-height: 740px;
   }
 
   .patient-bubble {
@@ -1104,5 +1327,28 @@ textarea {
   .chart-tablet,
   .wall-board {
     display: none;
+  }
+
+  .scene-record-overlay,
+  .scene-chat-overlay,
+  .room-command-bar {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    transform: none;
+  }
+
+  .scene-record-overlay {
+    top: 12px;
+    max-height: 210px;
+  }
+
+  .scene-chat-overlay {
+    bottom: 128px;
+    max-height: 360px;
+  }
+
+  .room-command-bar {
+    bottom: 12px;
   }
 }

@@ -9,7 +9,7 @@ CaseRoom is a local-first medical simulation room for high-stakes OSCE-style tra
 - Local seed cases and local rubric/guideline grounding
 - Lobby, doorway brief, consultation room, and debrief flows
 - Local QVAC text-completion bridge with automatic fallback if the bridge is unavailable
-- Browser-voice loop for live demo use: mic input via speech recognition and spoken patient replies via local speech synthesis
+- Voice loop for live demo use: mic input via browser speech recognition, spoken patient replies via local QVAC TTS when the bridge is running, and browser speech synthesis fallback
 - Persistent local embeddings workspace for bundled medical guidance and citation retrieval
 - Local SQLite session persistence for completed encounters inside the Electron shell
 
@@ -46,15 +46,17 @@ npm run test
 - The `packages/qvac-runtime` package now contains both the browser-safe adapter and a Node-side QVAC bridge process. The bridge uses `@qvac/sdk` for patient text completion.
 - When the bridge is reachable but the patient model is still cold, the app now requests a background warmup so the first encounter turn is less likely to stall.
 - The bridge also provisions a persistent local RAG workspace using QVAC embeddings and workspace storage. Debrief citations fall back to bundled static citations if the local RAG workspace is unavailable.
-- Voice input/output currently uses browser speech APIs in the renderer as the fastest local demo path. The adapter surface is kept separate so QVAC ASR/TTS can replace it later.
-- Spoken patient replies now prefer an English system voice when one is available, but final voice quality still depends on the browser and OS speech-synthesis voices installed on the device.
+- Voice output now tries QVAC Supertonic TTS through the local bridge first. If the bridge is unavailable, TTS model loading fails, or browser audio playback is blocked, the app falls back to the best available local English browser/OS voice.
+- Voice input currently uses browser speech recognition configured for English. QVAC Whisper/Parakeet ASR is the next integration step and requires adding local audio capture/upload or streaming from the renderer to the bridge.
 - No cloud services are required for the current demo path.
 
 ## Voice quality notes
 
-CaseRoom currently uses the best available local English browser/OS voice for spoken patient replies. For better free local quality on macOS, install higher-quality English voices in `System Settings > Accessibility > Spoken Content > System Voice > Manage Voices...`, then restart the browser or Electron app. Recommended local voices to try first are `Samantha`, `Ava`, `Allison`, or any English `Premium` / `Enhanced` voice available on the machine.
+CaseRoom currently tries local QVAC Supertonic TTS first. The bridge endpoint is `POST /tts` and returns WAV audio generated on-device through `TTS_EN_SUPERTONIC_Q8_0`.
 
-The current voice path is still browser speech synthesis. A future QVAC-native or dedicated local TTS adapter would be the right production upgrade for consistently natural patient speech across devices.
+If QVAC TTS is unavailable, CaseRoom falls back to the best available local English browser/OS voice. For better free fallback quality on macOS, install higher-quality English voices in `System Settings > Accessibility > Spoken Content > System Voice > Manage Voices...`, then restart the browser or Electron app. Recommended local voices to try first are `Samantha`, `Ava`, `Allison`, or any English `Premium` / `Enhanced` voice available on the machine.
+
+Speech-to-text is still browser Web Speech in this checkpoint. It is configured for `en-US`, but quality remains browser-dependent until the QVAC ASR bridge is added.
 
 ## QVAC bridge configuration
 
@@ -99,7 +101,8 @@ Supported built-in model constants currently wired in the bridge:
 
 ## Known limitations
 
-- Voice loop is live when the browser supports speech recognition and speech synthesis. This is not yet QVAC-backed ASR/TTS.
+- Patient speech output is QVAC-backed when the local bridge has been restarted with the latest code. Existing dev bridge processes may need to be stopped/restarted before `/tts` is available.
+- Voice input is not yet QVAC-backed ASR; it currently uses browser Web Speech and falls back to typed input when microphone permission or browser support is unavailable.
 - Session persistence is SQLite-backed in Electron, and debriefs can be exported as markdown evidence reports.
 - The room remains a renderer-driven 2.5D experience inside Electron rather than a game-style 3D environment.
 - If the QVAC bridge fails to start, the app falls back to deterministic local replies and surfaces that state in the UI.

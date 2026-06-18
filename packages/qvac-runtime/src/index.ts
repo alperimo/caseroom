@@ -18,6 +18,7 @@ type BrowserSpeechRecognition = {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
+  maxAlternatives?: number;
   onerror: ((event: { error: string }) => void) | null;
   onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
   onstart: (() => void) | null;
@@ -229,6 +230,13 @@ function answerHistoryFallback(session: EncounterSession, prompt: string): Encou
   let next = appendTurn(session, "clinician", prompt);
   let matched = false;
 
+  if (/\b(what'?s your name|what is your name|who are you|your name)\b/i.test(prompt)) {
+    return addAction(
+      appendTurn(next, "patient", `My name is ${session.scenario.brief.patientName}.`),
+      "history",
+    );
+  }
+
   for (const [topic, answer] of Object.entries(session.scenario.hiddenCase.truthTable)) {
     if (lowered.includes(topic.replaceAll("_", " "))) {
       matched = true;
@@ -404,6 +412,36 @@ export async function warmRuntimeModel(): Promise<void> {
   }
 }
 
+async function speakWithQvacTts(text: string): Promise<void> {
+  const response = await fetch(`${resolveRuntimeUrl()}/tts`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ text })
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? `QVAC TTS failed with ${response.status}.`);
+  }
+
+  const payload = (await response.json()) as {
+    audioBase64?: string;
+    mimeType?: string;
+  };
+  if (!payload.audioBase64) {
+    throw new Error("QVAC TTS returned no audio.");
+  }
+
+  const audio = new Audio(`data:${payload.mimeType ?? "audio/wav"};base64,${payload.audioBase64}`);
+  await audio.play();
+  await new Promise<void>((resolve) => {
+    audio.onended = () => resolve();
+    audio.onerror = () => resolve();
+  });
+}
+
 export function startVoiceCapture(options: VoiceCaptureOptions): VoiceCaptureController | null {
   const SpeechRecognition = getSpeechRecognitionConstructor();
   if (!SpeechRecognition) {
@@ -415,6 +453,7 @@ export function startVoiceCapture(options: VoiceCaptureOptions): VoiceCaptureCon
   recognition.continuous = false;
   recognition.interimResults = true;
   recognition.lang = "en-US";
+  recognition.maxAlternatives = 3;
 
   recognition.onstart = () => {
     options.onStateChange?.("listening");
@@ -492,6 +531,14 @@ export async function speakText(text: string): Promise<void> {
   }
 
   window.speechSynthesis.cancel();
+
+  try {
+    await speakWithQvacTts(cleanText);
+    return;
+  } catch {
+    // Fall through to browser speech synthesis if QVAC TTS is cold or unavailable.
+  }
+
   const preferredVoice = await resolvePreferredVoice();
 
   await new Promise<void>((resolve, reject) => {

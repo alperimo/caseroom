@@ -112,6 +112,7 @@ export function App() {
   const promptInputRef = useRef<HTMLTextAreaElement | null>(null);
   const historyRef = useRef<DebriefRun[]>([]);
   const lastDraftSignatureRef = useRef<string | null>(null);
+  const initialSpokenSessionIdRef = useRef<string | null>(null);
   const warmupAttemptedRef = useRef(false);
   const draftRuns = history.filter((item) => item.status === "in_progress" && item.session);
   const completedRuns = history.filter((item) => item.status === "completed");
@@ -234,6 +235,22 @@ export function App() {
   }, [screen, session?.transcript.length]);
 
   useEffect(() => {
+    if (!session || screen !== "room" || initialSpokenSessionIdRef.current === session.id) {
+      return;
+    }
+
+    const openingTurn = session.transcript.find((turn) => turn.speaker === "patient");
+    if (!openingTurn) {
+      return;
+    }
+
+    initialSpokenSessionIdRef.current = session.id;
+    void speakText(openingTurn.text).catch((error: unknown) => {
+      setVoiceError(error instanceof Error ? error.message : String(error));
+    });
+  }, [screen, session]);
+
+  useEffect(() => {
     if (!session || (screen !== "brief" && screen !== "room")) {
       return;
     }
@@ -279,12 +296,39 @@ export function App() {
 
   function chooseCase(scenario: MedicalScenario) {
     setSelectedCase(scenario);
-    setSession(createSession(scenario));
+    const nextSession = createSession(scenario);
+    setSession(nextSession);
+    initialSpokenSessionIdRef.current = null;
     setActiveRun(null);
     setActiveReport(null);
     setExportState("idle");
     setExportMessage(null);
     setScreen("brief");
+  }
+
+  function playOpeningTurn(nextSession: EncounterSession) {
+    if (initialSpokenSessionIdRef.current === nextSession.id) {
+      return;
+    }
+
+    const openingTurn = nextSession.transcript.find((turn) => turn.speaker === "patient");
+    if (!openingTurn) {
+      return;
+    }
+
+    initialSpokenSessionIdRef.current = nextSession.id;
+    void speakText(openingTurn.text).catch((error: unknown) => {
+      setVoiceError(error instanceof Error ? error.message : String(error));
+    });
+  }
+
+  function enterRoom() {
+    if (!session) {
+      return;
+    }
+
+    setScreen("room");
+    playOpeningTurn(session);
   }
 
   async function submitPrompt(promptText: string) {
@@ -401,6 +445,7 @@ export function App() {
     voiceControllerRef.current?.cancel();
     setSelectedCase(run.session.scenario);
     setSession(run.session);
+    initialSpokenSessionIdRef.current = run.session.id;
     setMessage("");
     setVoiceState("idle");
     setVoiceError(null);
@@ -450,6 +495,7 @@ export function App() {
     setScreen("lobby");
     setSelectedCase(null);
     setSession(null);
+    initialSpokenSessionIdRef.current = null;
     setMessage("");
     setVoiceState("idle");
     setVoiceError(null);
@@ -460,7 +506,6 @@ export function App() {
   }
 
   const latestPatientTurn = session?.transcript.slice().reverse().find((turn) => turn.speaker === "patient");
-  const latestClinicianTurn = session?.transcript.slice().reverse().find((turn) => turn.speaker === "clinician");
   const clinicalFindings = session ? buildClinicalFindings(session) : [];
 
   return (
@@ -630,7 +675,7 @@ export function App() {
               <button className="ghost-button" onClick={resetFlow}>
                 Back to lobby
               </button>
-              <button className="primary-button" onClick={() => setScreen("room")}>
+              <button className="primary-button" onClick={enterRoom}>
                 Enter room
               </button>
             </div>
@@ -639,7 +684,7 @@ export function App() {
       )}
 
       {screen === "room" && selectedCase && session && (
-        <main className="simulation-room">
+        <main className="simulation-room simulation-room-full">
           <section className="room-stage" aria-label="Consultation room">
             <div className="room-topline">
               <div>
@@ -694,130 +739,115 @@ export function App() {
                 <strong>{selectedCase.brief.age} years</strong>
                 <p>{selectedCase.brief.chiefComplaint}</p>
               </div>
-            </div>
 
-            <div className="room-command-bar">
-              {(
-                [
-                  ["history", "Ask", Mic],
-                  ["examine", "Exam", Stethoscope],
-                  ["order_test", "Tests", TestTube2],
-                  ["diagnose", "Impression", Brain],
-                  ["treatment_plan", "Plan", ClipboardList],
-                  ["safety_net", "Safety", ShieldCheck]
-                ] as const
-              ).map(([kind, label, Icon]) => (
-                <button key={kind} className="tool-button" onClick={() => runAction(kind)} type="button">
-                  <Icon size={18} />
-                  <span>{label}</span>
-                </button>
-              ))}
-              <button className="end-button" onClick={endEncounter} type="button">
-                End encounter
-              </button>
-            </div>
-          </section>
+              <aside className="scene-record-overlay">
+                <div className="record-person">
+                  <div className="record-avatar">{getPatientInitials(selectedCase.brief.patientName)}</div>
+                  <div>
+                    <h2>{selectedCase.brief.patientName}</h2>
+                    <p>{selectedCase.brief.age} years · {selectedCase.specialty}</p>
+                  </div>
+                </div>
 
-          <section className="conversation-dock">
-            <div className="dock-header">
-              <div>
-                <p className="eyebrow">Live Conversation</p>
-                <h2>{selectedCase.brief.patientName}</h2>
-              </div>
-              <span className="voice-indicator">
-                <Volume2 size={15} />
-                {productizeStatusLabel(runtime.voiceMode)}
-              </span>
-            </div>
+                <div className="record-vitals compact">
+                  <span>HR {selectedCase.brief.visibleVitals.hr}</span>
+                  <span>BP {selectedCase.brief.visibleVitals.bp}</span>
+                  <span>SpO2 {selectedCase.brief.visibleVitals.spo2}</span>
+                  <span>Temp {selectedCase.brief.visibleVitals.temp}</span>
+                </div>
 
-            <div className="transcript-log">
-              {session.transcript.map((turn) => (
-                <article key={turn.id} className={`turn turn-${turn.speaker}`}>
-                  <span>{turn.speaker === "clinician" ? "You" : selectedCase.brief.patientName}</span>
-                  <p>{turn.text}</p>
-                </article>
-              ))}
-              <div ref={transcriptEndRef} />
-            </div>
+                <div className="record-section">
+                  <h3>Findings</h3>
+                  {clinicalFindings.length === 0 ? (
+                    <p className="muted">No exam or test findings yet.</p>
+                  ) : (
+                    <ul className="finding-list">
+                      {clinicalFindings.slice(-3).map((finding) => (
+                        <li key={finding.title}>
+                          <strong>{finding.title}</strong>
+                          <span>{finding.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </aside>
 
-            <div className="composer">
-              <label htmlFor="prompt">Ask the patient</label>
-              <textarea
-                id="prompt"
-                ref={promptInputRef}
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder="Ask a focused question or explain your next step."
-              />
-              <div className="composer-actions">
-                <button
-                  className={voiceState === "listening" ? "secondary-button" : "ghost-button"}
-                  onClick={toggleVoiceCapture}
-                  type="button"
-                >
-                  <Mic size={18} />
-                  {voiceState === "listening"
-                    ? "Stop"
-                    : voiceState === "processing"
-                      ? "Listening"
-                      : "Voice"}
-                </button>
-                <button className="primary-button" onClick={sendPrompt} type="button">
-                  <Send size={18} />
-                  Send
-                </button>
-              </div>
-              {voiceError ? <p className="voice-error">{voiceError}</p> : null}
-            </div>
-          </section>
+              <section className="scene-chat-overlay">
+                <div className="dock-header">
+                  <div>
+                    <p className="eyebrow">Conversation</p>
+                    <h2>{selectedCase.brief.patientName}</h2>
+                  </div>
+                  <span className="voice-indicator">
+                    <Volume2 size={15} />
+                    {productizeStatusLabel(runtime.voiceMode)}
+                  </span>
+                </div>
 
-          <aside className="record-dock">
-            <p className="eyebrow">Patient Record</p>
-            <div className="record-person">
-              <div className="record-avatar">{getPatientInitials(selectedCase.brief.patientName)}</div>
-              <div>
-                <h2>{selectedCase.brief.patientName}</h2>
-                <p>{selectedCase.brief.age} years · {selectedCase.specialty}</p>
-              </div>
-            </div>
-
-            <div className="record-vitals">
-              <span>HR {selectedCase.brief.visibleVitals.hr}</span>
-              <span>BP {selectedCase.brief.visibleVitals.bp}</span>
-              <span>SpO2 {selectedCase.brief.visibleVitals.spo2}</span>
-              <span>Temp {selectedCase.brief.visibleVitals.temp}</span>
-            </div>
-
-            <div className="record-section">
-              <h3>Clinical findings</h3>
-              {clinicalFindings.length === 0 ? (
-                <p className="muted">No exam or test findings recorded yet.</p>
-              ) : (
-                <ul className="finding-list">
-                  {clinicalFindings.map((finding) => (
-                    <li key={finding.title}>
-                      <strong>{finding.title}</strong>
-                      <span>{finding.detail}</span>
-                    </li>
+                <div className="transcript-log">
+                  {session.transcript.map((turn) => (
+                    <article key={turn.id} className={`turn turn-${turn.speaker}`}>
+                      <span>{turn.speaker === "clinician" ? "You" : selectedCase.brief.patientName}</span>
+                      <p>{turn.text}</p>
+                    </article>
                   ))}
-                </ul>
-              )}
-            </div>
+                  <div ref={transcriptEndRef} />
+                </div>
 
-            <div className="record-section">
-              <h3>Focus</h3>
-              <div className="focus-chip-list">
-                {selectedCase.hiddenCase.mustAsk.map((item) => (
-                  <span key={item}>{item}</span>
+                <div className="composer">
+                  <textarea
+                    id="prompt"
+                    ref={promptInputRef}
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    placeholder="Ask the patient..."
+                    aria-label="Ask the patient"
+                  />
+                  <div className="composer-actions">
+                    <button
+                      className={voiceState === "listening" ? "secondary-button" : "ghost-button"}
+                      onClick={toggleVoiceCapture}
+                      type="button"
+                    >
+                      <Mic size={18} />
+                      {voiceState === "listening"
+                        ? "Stop"
+                        : voiceState === "processing"
+                          ? "Listening"
+                          : "Voice"}
+                    </button>
+                    <button className="primary-button" onClick={sendPrompt} type="button">
+                      <Send size={18} />
+                      Send
+                    </button>
+                  </div>
+                  {voiceError ? <p className="voice-error">{voiceError}</p> : null}
+                </div>
+              </section>
+
+              <div className="room-command-bar">
+                {(
+                  [
+                    ["history", "Ask", Mic],
+                    ["examine", "Exam", Stethoscope],
+                    ["order_test", "Tests", TestTube2],
+                    ["diagnose", "Impression", Brain],
+                    ["treatment_plan", "Plan", ClipboardList],
+                    ["safety_net", "Safety", ShieldCheck]
+                  ] as const
+                ).map(([kind, label, Icon]) => (
+                  <button key={kind} className="tool-button" onClick={() => runAction(kind)} type="button">
+                    <Icon size={18} />
+                    <span>{label}</span>
+                  </button>
                 ))}
+                <button className="end-button" onClick={endEncounter} type="button">
+                  End
+                </button>
               </div>
             </div>
-
-            <div className="record-section">
-              <h3>Last question</h3>
-              <p>{latestClinicianTurn?.text ?? "Start with a focused opening question."}</p>
-            </div>
-          </aside>
+          </section>
         </main>
       )}
 
