@@ -47,6 +47,7 @@ npm run test
 - When the bridge is reachable but the patient model is still cold, the app now requests a background warmup so the first encounter turn is less likely to stall.
 - The bridge also provisions a persistent local RAG workspace using QVAC embeddings and workspace storage. Debrief citations fall back to bundled static citations if the local RAG workspace is unavailable.
 - Voice input/output currently uses browser speech APIs in the renderer as the fastest local demo path. The adapter surface is kept separate so QVAC ASR/TTS can replace it later.
+- Spoken patient replies now prefer an English system voice when one is available, but final voice quality still depends on the browser and OS speech-synthesis voices installed on the device.
 - No cloud services are required for the current demo path.
 
 ## QVAC bridge configuration

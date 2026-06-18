@@ -130,6 +130,74 @@ function getVoiceRuntimeSupport(): VoiceRuntimeSupport {
   };
 }
 
+function isEnglishVoice(voice: SpeechSynthesisVoice): boolean {
+  return voice.lang.toLowerCase().startsWith("en");
+}
+
+function rankVoice(voice: SpeechSynthesisVoice): number {
+  const name = voice.name.toLowerCase();
+  let score = 0;
+
+  if (voice.default) {
+    score += 4;
+  }
+  if (voice.localService) {
+    score += 3;
+  }
+  if (voice.lang.toLowerCase() === "en-us") {
+    score += 4;
+  } else if (voice.lang.toLowerCase().startsWith("en")) {
+    score += 2;
+  }
+  if (
+    name.includes("samantha") ||
+    name.includes("ava") ||
+    name.includes("allison") ||
+    name.includes("premium") ||
+    name.includes("natural")
+  ) {
+    score += 2;
+  }
+
+  return score;
+}
+
+async function resolvePreferredVoice(): Promise<SpeechSynthesisVoice | null> {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    return null;
+  }
+
+  const voices = window.speechSynthesis.getVoices();
+  const englishVoices = voices.filter(isEnglishVoice);
+  if (englishVoices.length > 0) {
+    return englishVoices.sort((left, right) => rankVoice(right) - rankVoice(left))[0] ?? null;
+  }
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesChanged);
+      window.clearTimeout(timeoutId);
+      resolve();
+    };
+
+    const handleVoicesChanged = () => {
+      finish();
+    };
+
+    const timeoutId = window.setTimeout(finish, 250);
+    window.speechSynthesis.addEventListener("voiceschanged", handleVoicesChanged, { once: true });
+  });
+
+  const refreshedEnglishVoices = window.speechSynthesis.getVoices().filter(isEnglishVoice);
+  return refreshedEnglishVoices.sort((left, right) => rankVoice(right) - rankVoice(left))[0] ?? null;
+}
+
 function describeVoiceMode(support: VoiceRuntimeSupport): string {
   if (support.canTranscribe && support.canSpeak) {
     return "browser voice loop ready";
@@ -462,11 +530,16 @@ export async function speakText(text: string): Promise<void> {
   }
 
   window.speechSynthesis.cancel();
+  const preferredVoice = await resolvePreferredVoice();
 
   await new Promise<void>((resolve, reject) => {
     const utterance = new window.SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 1;
-    utterance.pitch = 0.95;
+    utterance.lang = preferredVoice?.lang ?? "en-US";
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+    utterance.rate = 0.97;
+    utterance.pitch = 1;
     utterance.onend = () => resolve();
     utterance.onerror = () => reject(new Error("Speech synthesis failed."));
     window.speechSynthesis.speak(utterance);

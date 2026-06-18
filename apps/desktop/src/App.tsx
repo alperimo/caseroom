@@ -87,13 +87,13 @@ export function App() {
       return "Saved on this device";
     }
     if (label.includes("voice loop")) {
-      return "Voice available";
+      return "Voice conversation ready";
     }
     if (label.includes("mic input ready")) {
-      return "Mic ready";
+      return "Microphone ready";
     }
     if (label.includes("spoken reply ready")) {
-      return "Voice output only";
+      return "Patient voice ready";
     }
     if (label.includes("text fallback only")) {
       return "Text mode";
@@ -666,12 +666,12 @@ export function App() {
             <div className="action-stack">
               {(
                 [
-                  ["history", "Prompt patient"],
-                  ["examine", "Perform exam"],
-                  ["order_test", "Order test"],
-                  ["diagnose", "Commit diagnosis"],
-                  ["treatment_plan", "State plan"],
-                  ["safety_net", "Safety-net advice"]
+                  ["history", "Ask follow-up"],
+                  ["examine", "Examine patient"],
+                  ["order_test", "Review tests"],
+                  ["diagnose", "Record impression"],
+                  ["treatment_plan", "Explain plan"],
+                  ["safety_net", "Give safety net"]
                 ] as const
               ).map(([kind, label]) => (
                 <button key={kind} className="secondary-button" onClick={() => runAction(kind)}>
