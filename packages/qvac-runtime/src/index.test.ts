@@ -19,4 +19,20 @@ describe("qvac-runtime voice context", () => {
     expect(utiContext).toEqual(expect.arrayContaining(["pregnancy", "pregnant", "flank pain"]));
     expect(anemiaContext).toEqual(expect.arrayContaining(["clots", "clot", "menstruation"]));
   });
+
+  it("excludes common stopwords from the ASR context phrases", () => {
+    const chestPainContext = buildVoiceContextPhrases(sessionFor("ed-chest-001"));
+    
+    // Stopwords should not be standalone entries in the context phrases
+    expect(chestPainContext).not.toContain("of");
+    expect(chestPainContext).not.toContain("and");
+    expect(chestPainContext).not.toContain("the");
+  });
+
+  it("contains expanded clinical synonyms", () => {
+    const chestPainContext = buildVoiceContextPhrases(sessionFor("ed-chest-001"));
+
+    // Check mapping/expansions for 'radiation' and 'sweating'
+    expect(chestPainContext).toEqual(expect.arrayContaining(["spread", "radiating", "clammy"]));
+  });
 });

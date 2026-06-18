@@ -287,7 +287,7 @@ function normalizedTranscript(session: EncounterSession): string {
 
 export function evaluateEncounter(session: EncounterSession): DebriefReport {
   const transcript = normalizedTranscript(session);
-  const mustAskHits = session.scenario.hiddenCase.mustAsk.filter((item) => transcript.includes(item));
+  const mustAskHits = session.scenario.hiddenCase.mustAsk.filter((item) => session.revealedTopics.includes(item));
   const actionCoverage = new Set(session.actionLog);
   const diagnosisMatch =
     session.diagnosisText?.toLowerCase().includes(session.scenario.hiddenCase.diagnosis.toLowerCase()) ?? false;

@@ -68,16 +68,25 @@ export type VoiceCaptureOptions = {
 };
 
 const clinicalConceptExpansions: Record<string, string[]> = {
-  allergy: ["allergic", "allergies"],
-  bleed: ["bleeding", "blood"],
-  breath: ["breathing", "breathless", "short of breath"],
-  cardiac: ["heart"],
-  clot: ["clots"],
-  menstruation: ["period", "periods", "last period"],
-  medication: ["medicine", "meds", "tablets"],
-  pregnant: ["pregnancy", "contraception"],
-  swelling: ["swollen", "puffy"],
-  vision: ["visual", "eyesight"]
+  radiation: ["radiate", "radiates", "radiating", "spread", "spreads", "spreading", "go to", "going to", "travel", "travels", "traveling", "shoot", "shoots", "shooting", "left arm", "neck", "jaw", "back"],
+  sweating: ["sweat", "sweats", "sweaty", "clammy", "perspire", "perspiring", "perspiration", "diaphoresis", "diaphoretic", "drenched"],
+  "cardiac history": ["heart", "cardiac", "coronary", "angina", "infarction", "stroke", "cholesterol", "heart attack", "family history", "father", "mother", "dad", "mom", "parents"],
+  "shortness of breath": ["breath", "breathing", "breathless", "short of breath", "sob", "dyspnea", "winded", "gasping", "stairs", "climbing"],
+  pregnancy: ["pregnant", "pregnancy", "contraception", "period", "periods", "menstruation", "last period", "childbearing"],
+  fever: ["temperature", "temp", "feverish", "hot", "chills", "sweating", "sweats", "pyrexia"],
+  "flank pain": ["back pain", "side pain", "kidney pain", "loin pain", "flank", "back", "sides"],
+  allergies: ["allergy", "allergic", "reaction", "reactions", "side effect", "side effects", "penicillin", "antibiotic"],
+  duration: ["long", "start", "started", "begin", "began", "since when", "how long", "weeks", "months", "days"],
+  clots: ["clot", "clots", "clotting", "pieces", "lumps", "coagulate"],
+  diet: ["eat", "eating", "food", "meat", "vegetarian", "vegan", "nutrition", "meals", "appetite"],
+  "vision changes": ["blur", "blurry", "blurred", "double vision", "eyes", "eyesight", "sight", "seeing", "vision"],
+  "chest pain": ["angina", "pain", "tightness", "pressure", "heavy", "heaviness", "squeeze", "squeezing", "chest"],
+  "neurological symptoms": ["weakness", "numbness", "tingling", "speech", "talking", "paralysis", "stroke", "dizzy", "dizziness", "confusion"],
+  "medication adherence": ["tablets", "pills", "meds", "medicine", "prescriptions", "regularly", "taking", "stopped", "forgot"],
+  orthopnea: ["pillows", "propped up", "flat", "lying down", "sleep", "upright"],
+  "leg swelling": ["ankles", "legs", "swollen", "puffy", "edema", "fluid", "swelling"],
+  cough: ["coughing", "phlegm", "mucus", "sputum", "cough"],
+  "smoking history": ["smoke", "smoking", "cigarettes", "tobacco", "pack", "vape", "vaping", "quit"]
 };
 
 export function getRuntimeStatus(): RuntimeStatus {
@@ -251,13 +260,29 @@ function expandClinicalPhrase(phrase: string): string[] {
   const words = normalized.split(" ").filter(Boolean);
   const expanded = new Set<string>([normalized]);
 
-  for (const word of words) {
-    expanded.add(word);
-    if (word.endsWith("s") && word.length > 3) {
-      expanded.add(word.slice(0, -1));
-    } else if (word.length > 3) {
-      expanded.add(`${word}s`);
+  const stopwords = new Set(["of", "and", "the", "or", "any", "your", "have", "with", "about", "after", "at", "in", "on", "to", "for", "is", "was", "am", "are", "do", "you", "my", "me", "has", "had", "been"]);
+
+  for (const [concept, alternatives] of Object.entries(clinicalConceptExpansions)) {
+    if (normalized === concept || alternatives.includes(normalized)) {
+      expanded.add(concept);
+      alternatives.forEach((alternative) => expanded.add(alternative));
     }
+  }
+
+  for (const word of words) {
+    if (stopwords.has(word)) {
+      continue;
+    }
+
+    if (word.length >= 3) {
+      expanded.add(word);
+      if (word.endsWith("s") && word.length > 3) {
+        expanded.add(word.slice(0, -1));
+      } else if (word.length > 3) {
+        expanded.add(`${word}s`);
+      }
+    }
+
     for (const [concept, alternatives] of Object.entries(clinicalConceptExpansions)) {
       if (word === concept || alternatives.includes(word)) {
         expanded.add(concept);
@@ -276,14 +301,14 @@ function buildScenarioLexicon(session: EncounterSession): string[] {
   const hidden = session.scenario.hiddenCase;
   const truthKeys = Object.keys(hidden.truthTable);
   const values = [
+    ...hidden.mustAsk,
+    ...hidden.redFlags,
+    ...truthKeys,
+    ...hidden.safetyNet,
     session.scenario.title,
     session.scenario.specialty,
     session.scenario.brief.chiefComplaint,
-    hidden.diagnosis,
-    ...hidden.mustAsk,
-    ...hidden.redFlags,
-    ...hidden.safetyNet,
-    ...truthKeys
+    hidden.diagnosis
   ];
   return uniquePhrases(values.flatMap(expandClinicalPhrase));
 }
@@ -291,7 +316,7 @@ function buildScenarioLexicon(session: EncounterSession): string[] {
 export function buildVoiceContextPhrases(session: EncounterSession): string[] {
   return buildScenarioLexicon(session)
     .filter((phrase) => phrase.length >= 3)
-    .slice(0, 60);
+    .slice(0, 80);
 }
 
 function levenshtein(left: string, right: string): number {
