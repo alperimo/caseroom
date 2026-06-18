@@ -244,6 +244,13 @@ function answerHistoryFallback(session: EncounterSession, prompt: string): Encou
     );
   }
 
+  if (/^\s*(hi|hello|hey|good morning|good afternoon|good evening)\s*[.!?]*\s*$/i.test(prompt)) {
+    return addAction(
+      appendTurn(next, "patient", `Hello doctor. ${session.scenario.brief.chiefComplaint}`),
+      "history",
+    );
+  }
+
   for (const [topic, answer] of Object.entries(session.scenario.hiddenCase.truthTable)) {
     if (lowered.includes(topic.replaceAll("_", " "))) {
       matched = true;
@@ -257,7 +264,7 @@ function answerHistoryFallback(session: EncounterSession, prompt: string): Encou
     next = appendTurn(
       next,
       "patient",
-      "I am not sure what else matters, but I can tell you more if you ask about symptoms, timing, red flags, or what has changed.",
+      `I'm not sure, doctor. ${session.scenario.brief.chiefComplaint}`,
     );
   }
 
@@ -484,6 +491,94 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+function mergeAudioChunks(chunks: Float32Array[]): Float32Array {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const merged = new Float32Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return merged;
+}
+
+function downsampleAudio(input: Float32Array, sourceRate: number, targetRate: number): Float32Array {
+  if (targetRate >= sourceRate) {
+    return input;
+  }
+
+  const ratio = sourceRate / targetRate;
+  const outputLength = Math.floor(input.length / ratio);
+  const output = new Float32Array(outputLength);
+  for (let index = 0; index < outputLength; index += 1) {
+    const start = Math.floor(index * ratio);
+    const end = Math.min(Math.floor((index + 1) * ratio), input.length);
+    let sum = 0;
+    for (let sample = start; sample < end; sample += 1) {
+      sum += input[sample] ?? 0;
+    }
+    output[index] = sum / Math.max(1, end - start);
+  }
+  return output;
+}
+
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const bytesPerSample = 2;
+  const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+  const view = new DataView(buffer);
+
+  function writeString(offset: number, value: string) {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  }
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 8 * bytesPerSample, true);
+  writeString(36, "data");
+  view.setUint32(40, samples.length * bytesPerSample, true);
+
+  let offset = 44;
+  for (const sample of samples) {
+    const clamped = Math.max(-1, Math.min(1, sample));
+    view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+    offset += bytesPerSample;
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+async function transcribeAudioBlob(audioBlob: Blob, options: VoiceCaptureOptions): Promise<void> {
+  const audioBase64 = await blobToBase64(audioBlob);
+  const response = await fetch(`${resolveRuntimeUrl()}/asr`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ audioBase64, mimeType: audioBlob.type })
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? `QVAC ASR failed with ${response.status}.`);
+  }
+  const payload = (await response.json()) as { text?: string };
+  const text = payload.text?.trim() ?? "";
+  if (!isMeaningfulTranscript(text)) {
+    options.onError?.("I couldn't hear speech clearly. Try again a little closer to the microphone, or type the sentence.");
+    return;
+  }
+  await options.onFinal(text);
+}
+
 function isMeaningfulTranscript(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed || trimmed.includes("[No speech detected]") || /^\[[^\]]+\]$/.test(trimmed)) {
@@ -496,20 +591,60 @@ function startQvacVoiceCapture(options: VoiceCaptureOptions): VoiceCaptureContro
   if (
     typeof navigator === "undefined" ||
     !navigator.mediaDevices?.getUserMedia ||
-    typeof MediaRecorder === "undefined"
+    typeof AudioContext === "undefined"
   ) {
     return null;
   }
 
-  let recorder: MediaRecorder | null = null;
   let stream: MediaStream | null = null;
+  let audioContext: AudioContext | null = null;
+  let source: MediaStreamAudioSourceNode | null = null;
+  let processor: ScriptProcessorNode | null = null;
+  let silentOutput: GainNode | null = null;
   let stopped = false;
   let cancelled = false;
-  const chunks: Blob[] = [];
+  const chunks: Float32Array[] = [];
 
-  const stopTracks = () => {
+  const cleanup = () => {
+    processor?.disconnect();
+    silentOutput?.disconnect();
+    source?.disconnect();
+    void audioContext?.close();
+    processor = null;
+    silentOutput = null;
+    source = null;
+    audioContext = null;
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
+  };
+
+  const finishRecording = () => {
+    if (cancelled) {
+      cleanup();
+      options.onStateChange?.("idle");
+      return;
+    }
+
+    options.onStateChange?.("processing");
+    const sampleRate = audioContext?.sampleRate ?? 48000;
+    cleanup();
+    const merged = mergeAudioChunks(chunks);
+    if (merged.length < sampleRate * 0.35) {
+      options.onError?.("I couldn't hear speech clearly. Hold the voice button a moment longer, then try again.");
+      options.onStateChange?.("idle");
+      return;
+    }
+
+    const targetRate = 16000;
+    const downsampled = downsampleAudio(merged, sampleRate, targetRate);
+    const audioBlob = encodeWav(downsampled, targetRate);
+    void transcribeAudioBlob(audioBlob, options)
+      .catch((error: unknown) => {
+        options.onError?.(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        options.onStateChange?.("idle");
+      });
   };
 
   void navigator.mediaDevices
@@ -527,50 +662,20 @@ function startQvacVoiceCapture(options: VoiceCaptureOptions): VoiceCaptureContro
       }
 
       stream = mediaStream;
-      recorder = new MediaRecorder(mediaStream);
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunks.push(event.data);
-        }
-      };
-      recorder.onstop = () => {
-        if (cancelled) {
-          stopTracks();
-          options.onStateChange?.("idle");
+      audioContext = new AudioContext();
+      source = audioContext.createMediaStreamSource(mediaStream);
+      processor = audioContext.createScriptProcessor(4096, 1, 1);
+      silentOutput = audioContext.createGain();
+      silentOutput.gain.value = 0;
+      processor.onaudioprocess = (event) => {
+        if (stopped || cancelled) {
           return;
         }
-        options.onStateChange?.("processing");
-        stopTracks();
-        const audioBlob = new Blob(chunks, { type: recorder?.mimeType || "audio/webm" });
-        void blobToBase64(audioBlob)
-          .then(async (audioBase64) => {
-            const response = await fetch(`${resolveRuntimeUrl()}/asr`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ audioBase64, mimeType: audioBlob.type })
-            });
-            if (!response.ok) {
-              const payload = (await response.json().catch(() => ({}))) as { error?: string };
-              throw new Error(payload.error ?? `QVAC ASR failed with ${response.status}.`);
-            }
-            const payload = (await response.json()) as { text?: string };
-            const text = payload.text?.trim() ?? "";
-            if (!isMeaningfulTranscript(text)) {
-              options.onError?.("No speech was detected.");
-              return;
-            }
-            await options.onFinal(text);
-          })
-          .catch((error: unknown) => {
-            options.onError?.(error instanceof Error ? error.message : String(error));
-          })
-          .finally(() => {
-            options.onStateChange?.("idle");
-          });
+        chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
       };
-      recorder.start();
+      source.connect(processor);
+      processor.connect(silentOutput);
+      silentOutput.connect(audioContext.destination);
       options.onStateChange?.("listening");
     })
     .catch((error: unknown) => {
@@ -585,20 +690,13 @@ function startQvacVoiceCapture(options: VoiceCaptureOptions): VoiceCaptureContro
 
   return {
     stop() {
-      if (recorder?.state === "recording") {
-        recorder.stop();
-      } else {
-        stopTracks();
-        options.onStateChange?.("idle");
-      }
+      stopped = true;
+      finishRecording();
     },
     cancel() {
       stopped = true;
       cancelled = true;
-      if (recorder?.state === "recording") {
-        recorder.stop();
-      }
-      stopTracks();
+      cleanup();
       options.onStateChange?.("idle");
     }
   };
