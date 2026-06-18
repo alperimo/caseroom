@@ -51,7 +51,11 @@ export function App() {
   const [exportState, setExportState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const voiceControllerRef = useRef<VoiceCaptureController | null>(null);
+  const historyRef = useRef<DebriefRun[]>([]);
+  const lastDraftSignatureRef = useRef<string | null>(null);
   const warmupAttemptedRef = useRef(false);
+  const draftRuns = history.filter((item) => item.status === "in_progress" && item.session);
+  const completedRuns = history.filter((item) => item.status === "completed");
 
   function productizeStatusLabel(label: string): string {
     if (label.includes("bridge reachable")) {
@@ -148,6 +152,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
+  useEffect(() => {
     return () => {
       voiceControllerRef.current?.cancel();
       voiceControllerRef.current = null;
@@ -156,6 +164,50 @@ export function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!session || (screen !== "brief" && screen !== "room")) {
+      return;
+    }
+
+    const signature = JSON.stringify({
+      id: session.id,
+      screen,
+      turnCount: session.turnCount,
+      actionLog: session.actionLog,
+      revealedTopics: session.revealedTopics,
+      diagnosisText: session.diagnosisText,
+      planText: session.planText,
+      remainingMinutes: session.progress.remainingMinutes
+    });
+
+    if (lastDraftSignatureRef.current === signature) {
+      return;
+    }
+
+    lastDraftSignatureRef.current = signature;
+
+    const draftEntry: DebriefRun = {
+      id: session.id,
+      caseId: session.scenario.id,
+      report: {
+        title: session.scenario.title,
+        summary: session.scenario.brief.chiefComplaint,
+        overallScore: 0,
+        strengths: [],
+        gaps: [],
+        citations: []
+      },
+      finishedAt: new Date().toISOString(),
+      transcript: session.transcript,
+      session,
+      status: "in_progress"
+    };
+
+    void savePersistedRun(draftEntry, historyRef.current).then((nextHistory) => {
+      setHistory(nextHistory);
+    });
+  }, [screen, session]);
 
   function chooseCase(scenario: MedicalScenario) {
     setSelectedCase(scenario);
@@ -237,13 +289,14 @@ export function App() {
     }
 
     const report = await finishEncounter(session);
-    const entry = {
+    const entry: DebriefRun = {
       id: session.id,
       caseId: session.scenario.id,
       report: buildDebriefHighlights(report),
       finishedAt: new Date().toISOString(),
       transcript: session.transcript,
-      session
+      session,
+      status: "completed"
     };
     const nextHistory = await savePersistedRun(entry, history);
     setHistory(nextHistory);
@@ -266,6 +319,24 @@ export function App() {
     setExportState("idle");
     setExportMessage(null);
     setScreen("debrief");
+  }
+
+  function resumeEncounter(run: DebriefRun) {
+    if (!run.session) {
+      return;
+    }
+
+    voiceControllerRef.current?.cancel();
+    setSelectedCase(run.session.scenario);
+    setSession(run.session);
+    setMessage("");
+    setVoiceState("idle");
+    setVoiceError(null);
+    setActiveRun(null);
+    setActiveReport(null);
+    setExportState("idle");
+    setExportMessage(null);
+    setScreen("room");
   }
 
   async function exportReport() {
@@ -384,13 +455,32 @@ export function App() {
           </section>
 
           <aside className="card">
-            <p className="eyebrow">Recent Sessions</p>
-            <h2>Your recent debriefs</h2>
-            {history.length === 0 ? (
+            <p className="eyebrow">Saved Work</p>
+            {draftRuns.length > 0 ? (
+              <>
+                <h2>Continue encounter</h2>
+                <ul className="history-list">
+                  {draftRuns.map((item) => (
+                    <li key={`${item.caseId}-${item.finishedAt}`}>
+                      <button
+                        className="history-entry"
+                        onClick={() => resumeEncounter(item)}
+                        type="button"
+                      >
+                        <strong>{item.report.title}</strong>
+                        <span>Resume</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+            <h2>{draftRuns.length > 0 ? "Recent debriefs" : "Your recent debriefs"}</h2>
+            {completedRuns.length === 0 ? (
               <p className="muted">Completed encounters will appear here.</p>
             ) : (
               <ul className="history-list">
-                {history.map((item) => (
+                {completedRuns.map((item) => (
                   <li key={`${item.caseId}-${item.finishedAt}`}>
                     <button
                       className="history-entry"

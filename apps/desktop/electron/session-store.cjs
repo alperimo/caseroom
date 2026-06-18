@@ -29,6 +29,7 @@ async function createSessionStore(baseDir) {
       id TEXT PRIMARY KEY,
       case_id TEXT NOT NULL,
       finished_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'completed',
       report_json TEXT NOT NULL,
       transcript_json TEXT,
       session_json TEXT
@@ -38,6 +39,14 @@ async function createSessionStore(baseDir) {
     CREATE INDEX IF NOT EXISTS idx_encounter_sessions_finished_at
     ON encounter_sessions(finished_at DESC);
   `);
+  try {
+    database.run(`
+      ALTER TABLE encounter_sessions
+      ADD COLUMN status TEXT NOT NULL DEFAULT 'completed';
+    `);
+  } catch {
+    // Ignore duplicate-column errors on existing databases.
+  }
 
   async function persist() {
     const bytes = database.export();
@@ -47,7 +56,7 @@ async function createSessionStore(baseDir) {
 
   function mapRows(limit = 8) {
     const statement = database.prepare(`
-      SELECT id, case_id, finished_at, report_json, transcript_json, session_json
+      SELECT id, case_id, finished_at, status, report_json, transcript_json, session_json
       FROM encounter_sessions
       ORDER BY finished_at DESC
       LIMIT ?;
@@ -61,6 +70,7 @@ async function createSessionStore(baseDir) {
         id: String(row.id),
         caseId: String(row.case_id),
         finishedAt: String(row.finished_at),
+        status: String(row.status ?? "completed"),
         report: JSON.parse(String(row.report_json)),
         transcript: row.transcript_json ? JSON.parse(String(row.transcript_json)) : null,
         session: row.session_json ? JSON.parse(String(row.session_json)) : null
@@ -78,13 +88,14 @@ async function createSessionStore(baseDir) {
       database.run(
         `
           INSERT OR REPLACE INTO encounter_sessions
-            (id, case_id, finished_at, report_json, transcript_json, session_json)
-          VALUES (?, ?, ?, ?, ?, ?);
+            (id, case_id, finished_at, status, report_json, transcript_json, session_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?);
         `,
         [
           entry.id,
           entry.caseId,
           entry.finishedAt,
+          entry.status ?? "completed",
           JSON.stringify(entry.report),
           entry.transcript ? JSON.stringify(entry.transcript) : null,
           entry.session ? JSON.stringify(entry.session) : null

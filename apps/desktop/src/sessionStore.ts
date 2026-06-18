@@ -7,6 +7,7 @@ export type PersistedRun<Report> = {
   finishedAt: string;
   transcript: EncounterSession["transcript"] | null;
   session: EncounterSession | null;
+  status: "in_progress" | "completed";
 };
 
 const storageKey = "caseroom-demo-history";
@@ -40,7 +41,8 @@ export async function loadPersistedRuns<Report>(): Promise<PersistedRun<Report>[
       report: entry.report,
       finishedAt: entry.finishedAt,
       transcript: entry.transcript ?? null,
-      session: entry.session ?? null
+      session: entry.session ?? null,
+      status: entry.status ?? "completed"
     }));
   } catch {
     window.localStorage.removeItem(storageKey);

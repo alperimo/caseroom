@@ -2,6 +2,7 @@ type StoredEncounterSession = {
   id: string;
   caseId: string;
   finishedAt: string;
+  status: "in_progress" | "completed";
   report: unknown;
   transcript: unknown[] | null;
   session: unknown | null;
