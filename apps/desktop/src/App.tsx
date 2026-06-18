@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  AlertTriangle,
   Brain,
+  CheckCircle2,
   ChevronRight,
   ClipboardList,
   Clock3,
@@ -61,6 +63,15 @@ type ActionOverlay = {
   summary: string;
   items: string[];
   primaryLabel: string;
+  statusLabel: string;
+  nextStep: string;
+};
+
+type ActionState = "done" | "ready" | "needs";
+
+type ActionStatus = {
+  state: ActionState;
+  label: string;
 };
 
 function getPatientInitials(name: string): string {
@@ -109,41 +120,57 @@ function buildClinicalFindings(session: EncounterSession): ClinicalFinding[] {
 
 function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind, "history">): ActionOverlay {
   if (kind === "examine") {
+    const missingTopics = session.progress.missingCriticalTopics.slice(0, 2);
     return {
       kind,
       eyebrow: "Bedside exam",
       title: "Focused examination",
-      summary: "The bedside exam is now documented in the chart and contributes to risk assessment.",
+      summary: "Exam findings are now in the chart. They support risk assessment, but they do not replace focused history.",
       items: session.scenario.hiddenCase.examFindings,
-      primaryLabel: "Return to room"
+      primaryLabel: "Return to room",
+      statusLabel: "Exam documented",
+      nextStep: missingTopics.length > 0
+        ? `Clarify next: ${missingTopics.join(", ")}.`
+        : "Move to tests or commit an impression."
     };
   }
 
   if (kind === "order_test") {
+    const shouldEscalate = session.progress.needsUrgentEscalation;
     return {
       kind,
       eyebrow: "Results",
       title: "Tests reviewed",
-      summary: "Test results are available for interpretation. Use them before committing an impression.",
+      summary: "Results are available for interpretation. Use them to support, challenge, or escalate your working impression.",
       items: session.scenario.hiddenCase.testResults,
-      primaryLabel: "Continue consult"
+      primaryLabel: "Continue consult",
+      statusLabel: "Results available",
+      nextStep: shouldEscalate
+        ? "Risk is now high enough to explain urgent escalation."
+        : "If the history is complete, commit an impression."
     };
   }
 
   if (kind === "diagnose") {
+    const missingTopics = session.progress.missingCriticalTopics;
     return {
       kind,
       eyebrow: "Clinical impression",
       title: "Working diagnosis",
-      summary: session.diagnosisText ?? "More evidence is needed before a safe working diagnosis.",
-      items: session.progress.missingCriticalTopics.length > 0
-        ? session.progress.missingCriticalTopics.map((topic) => `Still clarify: ${topic}`)
+      summary: session.diagnosisText ?? "A working diagnosis needs enough history, exam, or test evidence.",
+      items: missingTopics.length > 0
+        ? missingTopics.map((topic) => `Still clarify: ${topic}`)
         : ["Key critical topics have been addressed."],
-      primaryLabel: "Use in plan"
+      primaryLabel: "Use in plan",
+      statusLabel: missingTopics.length > 0 ? "Provisional" : "Ready for plan",
+      nextStep: missingTopics.length > 0
+        ? "Ask the missing red-flag questions before relying on this diagnosis."
+        : "Explain the plan and safety net."
     };
   }
 
   if (kind === "treatment_plan") {
+    const hasMissingCriticalTopics = session.progress.missingCriticalTopics.length > 0;
     return {
       kind,
       eyebrow: "Plan",
@@ -152,7 +179,11 @@ function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind,
       items: session.progress.escalationReasons.length > 0
         ? session.progress.escalationReasons
         : ["No immediate escalation triggers are documented from the visible state."],
-      primaryLabel: "Back to patient"
+      primaryLabel: "Back to patient",
+      statusLabel: session.progress.needsUrgentEscalation ? "Urgent plan" : "Plan documented",
+      nextStep: hasMissingCriticalTopics
+        ? "Before finishing, close the remaining history gaps or acknowledge uncertainty."
+        : "Add explicit return precautions before ending."
     };
   }
 
@@ -162,8 +193,51 @@ function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind,
     title: "Return precautions",
     summary: session.planText ?? "Safety-net advice has been added to the plan.",
     items: session.scenario.hiddenCase.safetyNet,
-    primaryLabel: "Finish advice"
+    primaryLabel: "Finish advice",
+    statusLabel: "Safety net added",
+    nextStep: "If diagnosis and plan are documented, end the encounter for debrief."
   };
+}
+
+function getActionStatus(session: EncounterSession, kind: ActionKind): ActionStatus {
+  if (kind === "history") {
+    return session.progress.missingCriticalTopics.length === 0
+      ? { state: "done", label: "covered" }
+      : { state: "needs", label: `${session.progress.missingCriticalTopics.length} gaps` };
+  }
+  if (kind === "examine") {
+    return session.examPerformed ? { state: "done", label: "done" } : { state: "ready", label: "ready" };
+  }
+  if (kind === "order_test") {
+    return session.testsOrdered > 0 ? { state: "done", label: "reviewed" } : { state: "ready", label: "ready" };
+  }
+  if (kind === "diagnose") {
+    if (session.diagnosisText && !session.diagnosisText.toLowerCase().includes("more history")) {
+      return { state: "done", label: "set" };
+    }
+    return session.progress.missingCriticalTopics.length > 0
+      ? { state: "needs", label: "needs history" }
+      : { state: "ready", label: "ready" };
+  }
+  if (kind === "treatment_plan") {
+    return session.planText ? { state: "done", label: "set" } : { state: "ready", label: "ready" };
+  }
+  return session.planText?.includes("Safety-net advice covered")
+    ? { state: "done", label: "given" }
+    : { state: "ready", label: "ready" };
+}
+
+function formatSavedDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Saved locally";
+  }
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
 }
 
 export function App() {
@@ -718,66 +792,107 @@ export function App() {
           </section>
 
           <aside className="card saved-work panel-span-2">
-            <div>
-              <p className="eyebrow">Saved Work</p>
-              <h2>Continue where you left off</h2>
-              <p className="muted">
-                Draft encounters and completed debriefs stay available on this device for repeat practice.
-              </p>
+            <div className="saved-work-header">
+              <div>
+                <p className="eyebrow">Saved Work</p>
+                <h2>Practice record</h2>
+                <p className="muted">
+                  Resume interrupted rooms or review completed debriefs stored on this device.
+                </p>
+              </div>
+              <div className="saved-summary">
+                <span>
+                  <strong>{draftRuns.length}</strong>
+                  Drafts
+                </span>
+                <span>
+                  <strong>{completedRuns.length}</strong>
+                  Debriefs
+                </span>
+                <span>
+                  <strong>
+                    {completedRuns.length > 0
+                      ? formatPercent(Math.max(...completedRuns.map((item) => item.report.overallScore)))
+                      : "-"}
+                  </strong>
+                  Best score
+                </span>
+              </div>
             </div>
-            {draftRuns.length > 0 ? (
-              <>
-                <h2>Continue encounter</h2>
-                <ul className="history-list">
-                  {draftRuns.map((item) => (
-                    <li key={`${item.caseId}-${item.finishedAt}`}>
-                      <div className="history-actions">
-                        <button
-                          className="history-entry"
-                          onClick={() => resumeEncounter(item)}
-                          type="button"
-                        >
-                          <strong>{item.report.title}</strong>
-                          <span>Resume</span>
-                        </button>
-                        <button
-                          className="ghost-button history-discard"
-                          onClick={() => {
-                            void discardDraft(item);
-                          }}
-                          type="button"
-                        >
-                          Discard
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-            <div>
-              <h2>{draftRuns.length > 0 ? "Recent debriefs" : "Your recent debriefs"}</h2>
-              {completedRuns.length === 0 ? (
-                <div className="saved-empty">
-                  <FileText size={24} />
-                  <p>Completed encounters will appear here after your first debrief.</p>
+
+            <div className="saved-work-grid">
+              <section className="saved-section" aria-label="Draft encounters">
+                <div className="saved-section-header">
+                  <h3>In progress</h3>
+                  <span>{draftRuns.length} draft{draftRuns.length === 1 ? "" : "s"}</span>
                 </div>
-              ) : (
-                <ul className="history-list">
-                  {completedRuns.map((item) => (
-                    <li key={`${item.caseId}-${item.finishedAt}`}>
-                      <button
-                        className="history-entry"
-                        onClick={() => openSavedDebrief(item)}
-                        type="button"
-                      >
-                        <strong>{item.report.title}</strong>
-                        <span>{formatPercent(item.report.overallScore)}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                {draftRuns.length === 0 ? (
+                  <div className="saved-empty compact">
+                    <Clock3 size={22} />
+                    <p>Active rooms you leave mid-consult will appear here.</p>
+                  </div>
+                ) : (
+                  <ul className="history-list saved-list">
+                    {draftRuns.slice(0, 5).map((item) => (
+                      <li key={`${item.caseId}-${item.finishedAt}`}>
+                        <div className="history-actions">
+                          <button
+                            className="history-entry saved-entry"
+                            onClick={() => resumeEncounter(item)}
+                            type="button"
+                          >
+                            <span>
+                              <strong>{item.report.title}</strong>
+                              <small>{formatSavedDate(item.finishedAt)}</small>
+                            </span>
+                            <span className="entry-cta">Resume</span>
+                          </button>
+                          <button
+                            className="ghost-button history-discard"
+                            onClick={() => {
+                              void discardDraft(item);
+                            }}
+                            type="button"
+                          >
+                            Discard
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section className="saved-section" aria-label="Completed debriefs">
+                <div className="saved-section-header">
+                  <h3>Debriefs</h3>
+                  <span>{completedRuns.length} saved</span>
+                </div>
+                {completedRuns.length === 0 ? (
+                  <div className="saved-empty compact">
+                    <FileText size={22} />
+                    <p>Finish a room to create a scored debrief and transcript.</p>
+                  </div>
+                ) : (
+                  <ul className="history-list saved-list">
+                    {completedRuns.slice(0, 5).map((item) => (
+                      <li key={`${item.caseId}-${item.finishedAt}`}>
+                        <button
+                          className="history-entry saved-entry"
+                          onClick={() => openSavedDebrief(item)}
+                          type="button"
+                        >
+                          <span>
+                            <strong>{item.report.title}</strong>
+                            <small>{formatSavedDate(item.finishedAt)}</small>
+                          </span>
+                          <span className="score-chip">{formatPercent(item.report.overallScore)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
             </div>
           </aside>
         </main>
@@ -1044,19 +1159,28 @@ export function App() {
               <div className="room-command-bar">
                 {(
                   [
-                    ["history", voiceState === "listening" ? "Stop" : "Konuş", Mic],
+                    ["history", voiceState === "listening" ? "Stop" : "Voice", Mic],
                     ["examine", "Exam", Stethoscope],
                     ["order_test", "Tests", TestTube2],
                     ["diagnose", "Impression", Brain],
                     ["treatment_plan", "Plan", ClipboardList],
                     ["safety_net", "Safety", ShieldCheck]
                   ] as const
-                ).map(([kind, label, Icon]) => (
-                  <button key={kind} className="tool-button" onClick={() => runAction(kind)} type="button">
-                    <Icon size={18} />
-                    <span>{label}</span>
-                  </button>
-                ))}
+                ).map(([kind, label, Icon]) => {
+                  const status = session ? getActionStatus(session, kind) : { state: "ready", label: "ready" };
+                  return (
+                    <button
+                      key={kind}
+                      className={`tool-button tool-button-${status.state}`}
+                      onClick={() => runAction(kind)}
+                      type="button"
+                    >
+                      <Icon size={18} />
+                      <span>{label}</span>
+                      <small>{status.label}</small>
+                    </button>
+                  );
+                })}
                 <button className="end-button" onClick={endEncounter} type="button">
                   End
                 </button>
@@ -1078,12 +1202,29 @@ export function App() {
                         Close
                       </button>
                     </div>
+                    <div className="overlay-status-strip">
+                      <span className="status-pill success">
+                        <CheckCircle2 size={16} />
+                        {activeActionOverlay.statusLabel}
+                      </span>
+                      {session?.progress.missingCriticalTopics.length ? (
+                        <span className="status-pill warning">
+                          <AlertTriangle size={16} />
+                          {session.progress.missingCriticalTopics.length} history gap
+                          {session.progress.missingCriticalTopics.length === 1 ? "" : "s"}
+                        </span>
+                      ) : null}
+                    </div>
                     <p>{activeActionOverlay.summary}</p>
                     <ul className="overlay-findings">
                       {activeActionOverlay.items.map((item) => (
                         <li key={item}>{item}</li>
                       ))}
                     </ul>
+                    <div className="overlay-next-step">
+                      <span>Recommended next move</span>
+                      <strong>{activeActionOverlay.nextStep}</strong>
+                    </div>
                     <div className="action-row">
                       <button
                         className="primary-button"
