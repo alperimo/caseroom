@@ -21,6 +21,7 @@ import {
   type MedicalScenario
 } from "@caseroom/simulation-core";
 import {
+  cancelSpeech,
   finishEncounter,
   generatePatientTurn,
   getRuntimeStatus,
@@ -45,6 +46,15 @@ type DebriefRun = PersistedRun<ReturnType<typeof buildDebriefHighlights>>;
 type ClinicalFinding = {
   title: string;
   detail: string;
+};
+
+type ActionOverlay = {
+  kind: Exclude<ActionKind, "history">;
+  title: string;
+  eyebrow: string;
+  summary: string;
+  items: string[];
+  primaryLabel: string;
 };
 
 function getPatientInitials(name: string): string {
@@ -87,6 +97,65 @@ function buildClinicalFindings(session: EncounterSession): ClinicalFinding[] {
   return findings;
 }
 
+function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind, "history">): ActionOverlay {
+  if (kind === "examine") {
+    return {
+      kind,
+      eyebrow: "Bedside exam",
+      title: "Focused examination",
+      summary: "The bedside exam is now documented in the chart and contributes to risk assessment.",
+      items: session.scenario.hiddenCase.examFindings,
+      primaryLabel: "Return to room"
+    };
+  }
+
+  if (kind === "order_test") {
+    return {
+      kind,
+      eyebrow: "Results",
+      title: "Tests reviewed",
+      summary: "Test results are available for interpretation. Use them before committing an impression.",
+      items: session.scenario.hiddenCase.testResults,
+      primaryLabel: "Continue consult"
+    };
+  }
+
+  if (kind === "diagnose") {
+    return {
+      kind,
+      eyebrow: "Clinical impression",
+      title: "Working diagnosis",
+      summary: session.diagnosisText ?? "More evidence is needed before a safe working diagnosis.",
+      items: session.progress.missingCriticalTopics.length > 0
+        ? session.progress.missingCriticalTopics.map((topic) => `Still clarify: ${topic}`)
+        : ["Key critical topics have been addressed."],
+      primaryLabel: "Use in plan"
+    };
+  }
+
+  if (kind === "treatment_plan") {
+    return {
+      kind,
+      eyebrow: "Plan",
+      title: "Management plan",
+      summary: session.planText ?? "Plan not documented yet.",
+      items: session.progress.escalationReasons.length > 0
+        ? session.progress.escalationReasons
+        : ["No immediate escalation triggers are documented from the visible state."],
+      primaryLabel: "Back to patient"
+    };
+  }
+
+  return {
+    kind,
+    eyebrow: "Safety net",
+    title: "Return precautions",
+    summary: session.planText ?? "Safety-net advice has been added to the plan.",
+    items: session.scenario.hiddenCase.safetyNet,
+    primaryLabel: "Finish advice"
+  };
+}
+
 export function App() {
   const initialRuntime = useMemo(
     () => ({
@@ -105,6 +174,7 @@ export function App() {
   const [history, setHistory] = useState<DebriefRun[]>([]);
   const [activeRun, setActiveRun] = useState<DebriefRun | null>(null);
   const [activeReport, setActiveReport] = useState<DebriefRun["report"] | null>(null);
+  const [activeActionOverlay, setActiveActionOverlay] = useState<ActionOverlay | null>(null);
   const [exportState, setExportState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const voiceControllerRef = useRef<VoiceCaptureController | null>(null);
@@ -126,6 +196,9 @@ export function App() {
     }
     if (label.includes("QVAC on-demand load")) {
       return "Preparing AI";
+    }
+    if (label.includes("QVAC voice loop")) {
+      return "Voice conversation ready";
     }
     if (label.includes("QVAC") || label.includes("model")) {
       return "Private AI ready";
@@ -219,9 +292,7 @@ export function App() {
     return () => {
       voiceControllerRef.current?.cancel();
       voiceControllerRef.current = null;
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
+      cancelSpeech();
     };
   }, []);
 
@@ -303,6 +374,7 @@ export function App() {
     setActiveReport(null);
     setExportState("idle");
     setExportMessage(null);
+    setActiveActionOverlay(null);
     setScreen("brief");
   }
 
@@ -317,6 +389,8 @@ export function App() {
     }
 
     initialSpokenSessionIdRef.current = nextSession.id;
+    voiceControllerRef.current?.cancel();
+    voiceControllerRef.current = null;
     void speakText(openingTurn.text).catch((error: unknown) => {
       setVoiceError(error instanceof Error ? error.message : String(error));
     });
@@ -341,6 +415,8 @@ export function App() {
     const latestTurn = response.session.transcript[response.session.transcript.length - 1];
     if (latestTurn?.speaker === "patient") {
       try {
+        voiceControllerRef.current?.cancel();
+        voiceControllerRef.current = null;
         await speakText(latestTurn.text);
       } catch (error) {
         setVoiceError(error instanceof Error ? error.message : String(error));
@@ -365,6 +441,7 @@ export function App() {
     }
 
     setVoiceError(null);
+    cancelSpeech();
     voiceControllerRef.current = startVoiceCapture({
       onInterim(text) {
         setMessage(text);
@@ -392,11 +469,12 @@ export function App() {
       return;
     }
     if (kind === "history") {
-      promptInputRef.current?.focus();
+      toggleVoiceCapture();
       return;
     }
     const response = await generatePatientTurn(session, "", kind);
     setSession(response.session);
+    setActiveActionOverlay(buildActionOverlay(response.session, kind));
   }
 
   async function endEncounter() {
@@ -420,6 +498,7 @@ export function App() {
     setActiveReport(entry.report);
     setExportState("idle");
     setExportMessage(null);
+    setActiveActionOverlay(null);
     setScreen("debrief");
   }
 
@@ -434,6 +513,7 @@ export function App() {
     setActiveReport(run.report);
     setExportState("idle");
     setExportMessage(null);
+    setActiveActionOverlay(null);
     setScreen("debrief");
   }
 
@@ -453,6 +533,7 @@ export function App() {
     setActiveReport(null);
     setExportState("idle");
     setExportMessage(null);
+    setActiveActionOverlay(null);
     setScreen("room");
   }
 
@@ -503,6 +584,7 @@ export function App() {
     setActiveReport(null);
     setExportState("idle");
     setExportMessage(null);
+    setActiveActionOverlay(null);
   }
 
   const latestPatientTurn = session?.transcript.slice().reverse().find((turn) => turn.speaker === "patient");
@@ -829,7 +911,7 @@ export function App() {
               <div className="room-command-bar">
                 {(
                   [
-                    ["history", "Ask", Mic],
+                    ["history", voiceState === "listening" ? "Stop" : "Konuş", Mic],
                     ["examine", "Exam", Stethoscope],
                     ["order_test", "Tests", TestTube2],
                     ["diagnose", "Impression", Brain],
@@ -846,6 +928,41 @@ export function App() {
                   End
                 </button>
               </div>
+
+              {activeActionOverlay ? (
+                <div className="action-overlay" role="dialog" aria-modal="true" aria-label={activeActionOverlay.title}>
+                  <div className="action-overlay-card">
+                    <div className="action-overlay-header">
+                      <div>
+                        <p className="eyebrow">{activeActionOverlay.eyebrow}</p>
+                        <h3>{activeActionOverlay.title}</h3>
+                      </div>
+                      <button
+                        className="ghost-button overlay-close"
+                        onClick={() => setActiveActionOverlay(null)}
+                        type="button"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <p>{activeActionOverlay.summary}</p>
+                    <ul className="overlay-findings">
+                      {activeActionOverlay.items.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                    <div className="action-row">
+                      <button
+                        className="primary-button"
+                        onClick={() => setActiveActionOverlay(null)}
+                        type="button"
+                      >
+                        {activeActionOverlay.primaryLabel}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
         </main>

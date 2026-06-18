@@ -1158,15 +1158,15 @@ textarea {
 .scene-chat-overlay {
   left: 18px;
   bottom: 96px;
-  width: min(520px, 34vw);
-  max-height: min(520px, calc(100% - 138px));
+  width: min(500px, 32vw);
+  max-height: min(480px, calc(100% - 138px));
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.58);
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: 0 18px 48px rgba(18, 45, 56, 0.18);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 18px 48px rgba(18, 45, 56, 0.12);
 }
 
 .scene-chat-overlay .dock-header h2 {
@@ -1179,15 +1179,24 @@ textarea {
 
 .scene-chat-overlay .transcript-log {
   flex: 1;
-  min-height: 160px;
-  max-height: min(260px, 32vh);
+  min-height: 130px;
+  max-height: min(230px, 28vh);
   margin-top: 12px;
   padding-right: 4px;
 }
 
 .scene-chat-overlay .turn {
   max-width: 88%;
-  border: 1px solid rgba(20, 49, 59, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 10px 22px rgba(18, 45, 56, 0.08);
+}
+
+.scene-chat-overlay .turn-patient {
+  background: rgba(238, 243, 241, 0.72);
+}
+
+.scene-chat-overlay .turn-clinician {
+  background: rgba(213, 106, 48, 0.2);
 }
 
 .scene-chat-overlay .turn p {
@@ -1201,7 +1210,7 @@ textarea {
 .scene-chat-overlay .composer textarea {
   min-height: 78px;
   max-height: 130px;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.66);
 }
 
 .scene-chat-overlay .composer-actions {
@@ -1225,6 +1234,73 @@ textarea {
 .room-command-bar .end-button {
   min-height: 46px;
   border-radius: 14px;
+}
+
+.action-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background:
+    radial-gradient(circle at center, rgba(20, 49, 59, 0.08), rgba(20, 49, 59, 0.22)),
+    rgba(255, 248, 232, 0.16);
+  backdrop-filter: blur(3px);
+}
+
+.action-overlay-card {
+  width: min(760px, calc(100% - 40px));
+  max-height: min(520px, calc(100% - 80px));
+  overflow: auto;
+  padding: 22px;
+  border: 4px solid #2d211b;
+  border-radius: 24px;
+  background: rgba(255, 250, 240, 0.94);
+  box-shadow: 10px 12px 0 rgba(45, 33, 27, 0.28);
+}
+
+.action-overlay-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.action-overlay-header h3 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Georgia", serif;
+  font-size: clamp(1.4rem, 3vw, 2.1rem);
+}
+
+.action-overlay-card p {
+  margin: 14px 0;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.overlay-close {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.overlay-findings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 0;
+  margin: 16px 0 18px;
+  list-style: none;
+}
+
+.overlay-findings li {
+  padding: 14px 16px;
+  border: 2px solid rgba(45, 33, 27, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.64);
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 @media (max-width: 1100px) {

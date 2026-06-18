@@ -7,6 +7,8 @@ import {
   QWEN3_1_7B_INST_Q4,
   QWEN3_600M_INST_Q4,
   TTS_EN_SUPERTONIC_Q8_0,
+  VAD_SILERO_5_1_2,
+  WHISPER_EN_TINY_Q8_0,
   completion,
   embed,
   loadModel,
@@ -14,6 +16,7 @@ import {
   ragReindex,
   ragSaveEmbeddings,
   ragSearch,
+  transcribe,
   textToSpeech
 } from "@qvac/sdk";
 import { bundledRagDocuments, ragWorkspaceVersion } from "./rag-documents.mjs";
@@ -33,9 +36,11 @@ const supportedModels = {
 let modelId = null;
 let embeddingModelId = null;
 let ttsModelId = null;
+let asrModelId = null;
 let modelLoadPromise = null;
 let embeddingLoadPromise = null;
 let ttsLoadPromise = null;
+let asrLoadPromise = null;
 let activeModelName = requestedModel;
 let lastLoadError = null;
 let ragStatus = "initializing";
@@ -43,6 +48,8 @@ let ragReady = false;
 let lastRagError = null;
 let ttsReady = false;
 let lastTtsError = null;
+let asrReady = false;
+let lastAsrError = null;
 
 const ttsSampleRate = 44100;
 
@@ -192,6 +199,62 @@ async function ensureTtsModelLoaded() {
   })();
 
   return ttsLoadPromise;
+}
+
+async function ensureAsrModelLoaded() {
+  if (asrModelId) {
+    return asrModelId;
+  }
+  if (asrLoadPromise) {
+    return asrLoadPromise;
+  }
+
+  asrLoadPromise = (async () => {
+    try {
+      asrModelId = await loadModel({
+        modelSrc: WHISPER_EN_TINY_Q8_0,
+        modelConfig: {
+          vadModelSrc: VAD_SILERO_5_1_2,
+          language: "en",
+          no_timestamps: true,
+          suppress_blank: true,
+          suppress_nst: true,
+          temperature: 0.0,
+          vad_params: {
+            threshold: 0.6,
+            min_speech_duration_ms: 250,
+            min_silence_duration_ms: 650,
+            max_speech_duration_s: 14.0,
+            speech_pad_ms: 180
+          }
+        },
+        onProgress: (progress) => {
+          console.log(`[qvac] loading Whisper ASR: ${progress.percentage.toFixed(1)}%`);
+        }
+      });
+      asrReady = true;
+      lastAsrError = null;
+      console.log(`[qvac] ASR ready (${asrModelId})`);
+      return asrModelId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const registeredMatch = message.match(/Model with ID "([^"]+)" is already registered/);
+      if (registeredMatch) {
+        asrModelId = registeredMatch[1];
+        asrReady = true;
+        lastAsrError = null;
+        return asrModelId;
+      }
+      asrReady = false;
+      lastAsrError = message;
+      asrModelId = null;
+      throw error;
+    } finally {
+      asrLoadPromise = null;
+    }
+  })();
+
+  return asrLoadPromise;
 }
 
 async function loadRagManifest() {
@@ -439,7 +502,9 @@ const server = http.createServer(async (request, response) => {
       lastRagError,
       ragWorkspace,
       ttsReady,
-      lastTtsError
+      lastTtsError,
+      asrReady,
+      lastAsrError
     });
     return;
   }
@@ -448,6 +513,7 @@ const server = http.createServer(async (request, response) => {
     try {
       await ensureModelLoaded();
       void ensureTtsModelLoaded().catch(() => {});
+      void ensureAsrModelLoaded().catch(() => {});
       sendJson(response, 200, {
         ok: true,
         mode: "qvac",
@@ -462,6 +528,41 @@ const server = http.createServer(async (request, response) => {
         error: message,
         modelName: activeModelName,
         modelLoaded: false
+      });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/asr") {
+    try {
+      const body = await readJson(request);
+      const audioBase64 = typeof body.audioBase64 === "string" ? body.audioBase64 : "";
+      if (!audioBase64) {
+        sendJson(response, 400, { error: "audioBase64 is required." });
+        return;
+      }
+
+      const readyAsrModelId = await ensureAsrModelLoaded();
+      const audioChunk = Buffer.from(audioBase64, "base64");
+      const text = await transcribe({
+        modelId: readyAsrModelId,
+        audioChunk,
+        prompt: "English clinical consultation. Transcribe only the clinician's spoken words."
+      });
+      const transcript = String(text ?? "").replace(/\s+/g, " ").trim();
+      sendJson(response, 200, {
+        ok: true,
+        mode: "qvac-asr",
+        text: transcript
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      lastAsrError = message;
+      asrReady = false;
+      sendJson(response, 500, {
+        ok: false,
+        mode: "web-speech-fallback",
+        error: message
       });
     }
     return;
