@@ -66,6 +66,38 @@ export type VoiceCaptureOptions = {
   onStateChange?: (state: "idle" | "listening" | "processing") => void;
 };
 
+const topicAliases: Record<string, string[]> = {
+  allergies: ["allergy", "allergic", "medication allergy", "drug allergy"],
+  "cardiac history": ["heart history", "heart problems", "heart disease", "heart attack", "family history"],
+  "chest pain": ["chest pressure", "pain in your chest"],
+  clots: ["clot", "blood clots", "large clots", "clubs", "club", "cloths"],
+  cough: ["coughing"],
+  diet: ["eating", "appetite", "food", "meat"],
+  duration: ["how long", "when did", "how many days", "how many weeks", "how many months", "started"],
+  fever: ["temperature", "high temperature", "feverish"],
+  "flank pain": ["back pain", "side pain", "kidney pain", "pain in your back", "pain in your side"],
+  "leg swelling": ["swollen legs", "ankle swelling", "swollen ankles", "puffy ankles"],
+  "medication adherence": ["taking your tablets", "taking your meds", "missed tablets", "stopped medication"],
+  "neurological symptoms": ["weakness", "numbness", "trouble speaking", "confusion", "stroke symptoms"],
+  orthopnea: ["pillows", "lie flat", "lying flat", "sleep upright"],
+  pregnancy: ["pregnant", "are you pregnant", "could you be pregnant", "last period", "period late", "contraception"],
+  radiation: ["spread", "left arm", "jaw", "arm pain"],
+  "shortness of breath": ["breathless", "short of breath", "trouble breathing", "difficulty breathing"],
+  smoking: ["smoke", "smoker", "cigarettes"],
+  "smoking history": ["smoke", "smoker", "cigarettes"],
+  sweating: ["clammy", "sweaty", "sweating"],
+  "vision changes": ["blurred vision", "vision", "visual", "eyesight"]
+};
+
+const medicalTranscriptCorrections: Array<[RegExp, string]> = [
+  [/\bclubs\b/gi, "clots"],
+  [/\bclub\b/gi, "clot"],
+  [/\bcloths\b/gi, "clots"],
+  [/\bpc o s\b/gi, "PCOS"],
+  [/\bpcs\b/gi, "PCOS"],
+  [/\buti\b/gi, "UTI"]
+];
+
 export function getRuntimeStatus(): RuntimeStatus {
   const voiceSupport = getVoiceRuntimeSupport();
   return {
@@ -125,7 +157,7 @@ function getVoiceRuntimeSupport(): VoiceRuntimeSupport {
   const canRecord =
     typeof navigator !== "undefined" &&
     Boolean(navigator.mediaDevices?.getUserMedia) &&
-    typeof MediaRecorder !== "undefined";
+    typeof AudioContext !== "undefined";
 
   return {
     canTranscribe: canRecord || recognitionConstructor !== null,
@@ -219,12 +251,40 @@ function describeVoiceMode(support: VoiceRuntimeSupport): string {
   return "text fallback only";
 }
 
+function normalizeMedicalTranscript(text: string): string {
+  return medicalTranscriptCorrections.reduce(
+    (next, [pattern, replacement]) => next.replace(pattern, replacement),
+    text,
+  );
+}
+
+function aliasesForTopic(topic: string): string[] {
+  return [topic, topic.replaceAll("_", " "), ...(topicAliases[topic] ?? [])];
+}
+
+function promptMentionsTopic(prompt: string, topic: string): boolean {
+  const lowered = normalizeMedicalTranscript(prompt).toLowerCase();
+  return aliasesForTopic(topic).some((alias) => {
+    const escaped = alias.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`, "i").test(lowered);
+  });
+}
+
+function normalizePromptForScenario(session: EncounterSession, prompt: string): string {
+  let normalized = normalizeMedicalTranscript(prompt);
+  for (const topic of Object.keys(session.scenario.hiddenCase.truthTable)) {
+    if (topic === "clots" && promptMentionsTopic(normalized, topic)) {
+      normalized = normalized.replace(/\bclubs?\b/gi, "clots").replace(/\bcloths\b/gi, "clots");
+    }
+  }
+  return normalized;
+}
+
 function applyPromptSignals(session: EncounterSession, prompt: string): EncounterSession {
-  const lowered = prompt.toLowerCase();
   let next = appendTurn(session, "clinician", prompt);
 
   for (const topic of Object.keys(session.scenario.hiddenCase.truthTable)) {
-    if (lowered.includes(topic.replaceAll("_", " "))) {
+    if (promptMentionsTopic(prompt, topic)) {
       next = revealTopic(next, topic);
     }
   }
@@ -233,7 +293,6 @@ function applyPromptSignals(session: EncounterSession, prompt: string): Encounte
 }
 
 function answerHistoryFallback(session: EncounterSession, prompt: string): EncounterSession {
-  const lowered = prompt.toLowerCase();
   let next = appendTurn(session, "clinician", prompt);
   let matched = false;
 
@@ -252,7 +311,7 @@ function answerHistoryFallback(session: EncounterSession, prompt: string): Encou
   }
 
   for (const [topic, answer] of Object.entries(session.scenario.hiddenCase.truthTable)) {
-    if (lowered.includes(topic.replaceAll("_", " "))) {
+    if (promptMentionsTopic(prompt, topic)) {
       matched = true;
       next = revealTopic(next, topic);
       next = appendTurn(next, "patient", answer);
@@ -272,13 +331,14 @@ function answerHistoryFallback(session: EncounterSession, prompt: string): Encou
 }
 
 async function answerHistory(session: EncounterSession, prompt: string): Promise<EncounterSession> {
+  const normalizedPrompt = normalizePromptForScenario(session, prompt);
   try {
     const response = await fetch(`${resolveRuntimeUrl()}/patient-turn`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ session, prompt })
+      body: JSON.stringify({ session, prompt: normalizedPrompt })
     });
 
     if (!response.ok) {
@@ -290,10 +350,10 @@ async function answerHistory(session: EncounterSession, prompt: string): Promise
       throw new Error("Runtime returned an empty reply.");
     }
 
-    const next = applyPromptSignals(session, prompt);
+    const next = applyPromptSignals(session, normalizedPrompt);
     return addAction(appendTurn(next, "patient", payload.reply), "history");
   } catch {
-    return answerHistoryFallback(session, prompt);
+    return answerHistoryFallback(session, normalizedPrompt);
   }
 }
 

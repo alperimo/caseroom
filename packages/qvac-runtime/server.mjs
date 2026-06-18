@@ -348,6 +348,8 @@ function buildSystemPrompt(session) {
   return [
     "You are the patient in a medical OSCE simulation.",
     "You are only the patient. You are never the doctor, clinician, nurse, evaluator, tutor, assistant, or narrator.",
+    "The user is the doctor currently speaking with you in this consultation. Treat them as your doctor right now.",
+    "Do not refer to another doctor, your doctor, a GP, a specialist, or a previous clinician unless that fact appears explicitly in the case truth table.",
     `Your name is ${session.scenario.brief.patientName}. If asked for your name, answer with that name and nothing about being a doctor.`,
     "Do not say you are here to evaluate, examine, treat, diagnose, prescribe, or manage the clinician.",
     "Do not coach, quiz, assess, or prompt the clinician. Never ask what the clinician's next step is.",
@@ -391,6 +393,10 @@ async function generatePatientReply(session, prompt) {
     return `My name is ${session.scenario.brief.patientName}.`;
   }
 
+  if (/\b(pcos|polycystic ovary|you have|you've got|you may have|i think you have|diagnos(?:e|is))\b/i.test(prompt)) {
+    return "I didn't know that. Could you explain what that means for me?";
+  }
+
   const readyModelId = await ensureModelLoaded();
   const run = completion({
     modelId: readyModelId,
@@ -411,11 +417,15 @@ function sanitizePatientReply(reply, session) {
   const evaluatorLeak = /\b(evaluate|examine|treat|diagnose|prescribe|manage)\s+you\b/i;
   const coachingLeak = /\b(what'?s your next step|what is your next step|what would you do next|next step\??|your next move|what do you want to do|what are you going to do)\b/i;
   const examinerRecapLeak = /\b(no fever|flank pain|medication allergies|red flags|differential|diagnosis|rubric|checklist)\b.*\b(next step|what'?s next|what would you)\b/i;
+  const otherDoctorLeak = /\b(my doctor|the doctor|a doctor|gp|specialist|consultant)\s+(told|said|says|has told|has been told|explained|diagnosed)\b/i;
   if (roleLeak.test(singleLine) || evaluatorLeak.test(singleLine)) {
     return `My name is ${session.scenario.brief.patientName}.`;
   }
   if (coachingLeak.test(singleLine) || examinerRecapLeak.test(singleLine)) {
     return `I'm still uncomfortable, doctor. ${session.scenario.brief.chiefComplaint}`;
+  }
+  if (otherDoctorLeak.test(singleLine)) {
+    return "I didn't know that. Could you explain what that means for me?";
   }
   return singleLine;
 }
