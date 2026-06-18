@@ -50,6 +50,9 @@ app.whenReady().then(async () => {
   ipcMain.handle("sessions:save", async (_event, entry) => {
     return sessionStore.saveSession(entry);
   });
+  ipcMain.handle("sessions:delete", async (_event, id) => {
+    return sessionStore.deleteSession(id);
+  });
   ipcMain.handle("evidence:save", async (_event, payload) => {
     const result = await dialog.showSaveDialog({
       title: "Save CaseRoom report",

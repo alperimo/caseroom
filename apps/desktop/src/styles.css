@@ -275,6 +275,21 @@ textarea {
   background: rgba(255, 255, 255, 0.82);
 }
 
+.history-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.history-discard {
+  min-width: 98px;
+  padding-inline: 16px;
+  color: var(--accent-dark);
+  border-color: rgba(159, 73, 32, 0.16);
+  background: rgba(255, 255, 255, 0.44);
+}
+
 .compact-hero,
 .quick-steps {
   min-height: 180px;
@@ -571,5 +586,9 @@ textarea {
   .history-entry,
   .case-card {
     border-radius: 20px;
+  }
+
+  .history-actions {
+    grid-template-columns: 1fr;
   }
 }

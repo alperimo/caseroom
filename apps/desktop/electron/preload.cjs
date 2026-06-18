@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld("caseroomDesktop", {
     },
     saveSession(entry) {
       return ipcRenderer.invoke("sessions:save", entry);
+    },
+    deleteSession(id) {
+      return ipcRenderer.invoke("sessions:delete", id);
     }
   },
   evidenceStore: {

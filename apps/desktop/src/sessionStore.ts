@@ -63,3 +63,17 @@ export async function savePersistedRun<Report>(
   window.localStorage.setItem(storageKey, JSON.stringify(nextRuns));
   return nextRuns;
 }
+
+export async function deletePersistedRun<Report>(
+  id: string,
+  currentRuns: PersistedRun<Report>[],
+): Promise<PersistedRun<Report>[]> {
+  const desktopStore = getDesktopStore();
+  if (desktopStore) {
+    return desktopStore.deleteSession(id) as Promise<PersistedRun<Report>[]>;
+  }
+
+  const nextRuns = currentRuns.filter((entry) => entry.id !== id);
+  window.localStorage.setItem(storageKey, JSON.stringify(nextRuns));
+  return nextRuns;
+}

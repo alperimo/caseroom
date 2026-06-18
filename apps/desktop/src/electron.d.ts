@@ -15,6 +15,7 @@ type CaseRoomDesktopApi = {
   sessionStore: {
     listSessions(limit?: number): Promise<StoredEncounterSession[]>;
     saveSession(entry: StoredEncounterSession): Promise<StoredEncounterSession[]>;
+    deleteSession(id: string): Promise<StoredEncounterSession[]>;
   };
   evidenceStore: {
     saveArtifact(payload: {

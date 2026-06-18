@@ -20,6 +20,7 @@ import {
   type RuntimeStatus
 } from "@caseroom/qvac-runtime";
 import {
+  deletePersistedRun,
   getStorageModeLabel,
   loadPersistedRuns,
   savePersistedRun,
@@ -339,6 +340,19 @@ export function App() {
     setScreen("room");
   }
 
+  async function discardDraft(run: DebriefRun) {
+    const shouldDiscard = window.confirm(
+      `Discard the saved draft for "${run.report.title}"? This will keep completed debriefs untouched.`,
+    );
+    if (!shouldDiscard) {
+      return;
+    }
+
+    const nextHistory = await deletePersistedRun(run.id, historyRef.current);
+    lastDraftSignatureRef.current = null;
+    setHistory(nextHistory);
+  }
+
   async function exportReport() {
     if (!activeRun) {
       return;
@@ -462,14 +476,25 @@ export function App() {
                 <ul className="history-list">
                   {draftRuns.map((item) => (
                     <li key={`${item.caseId}-${item.finishedAt}`}>
-                      <button
-                        className="history-entry"
-                        onClick={() => resumeEncounter(item)}
-                        type="button"
-                      >
-                        <strong>{item.report.title}</strong>
-                        <span>Resume</span>
-                      </button>
+                      <div className="history-actions">
+                        <button
+                          className="history-entry"
+                          onClick={() => resumeEncounter(item)}
+                          type="button"
+                        >
+                          <strong>{item.report.title}</strong>
+                          <span>Resume</span>
+                        </button>
+                        <button
+                          className="ghost-button history-discard"
+                          onClick={() => {
+                            void discardDraft(item);
+                          }}
+                          type="button"
+                        >
+                          Discard
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>

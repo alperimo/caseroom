@@ -103,6 +103,17 @@ async function createSessionStore(baseDir) {
       );
       await persist();
       return mapRows(8);
+    },
+    async deleteSession(id) {
+      database.run(
+        `
+          DELETE FROM encounter_sessions
+          WHERE id = ?;
+        `,
+        [id]
+      );
+      await persist();
+      return mapRows(8);
     }
   };
 }
