@@ -601,29 +601,31 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="topbar-copy">
-          <p className="eyebrow">CaseRoom</p>
-          <h1>Clinical simulation room</h1>
-          <p className="topbar-note">
-            Practice a focused patient encounter, make decisions under pressure, then review the debrief.
-          </p>
-        </div>
-        <div className="status-strip">
-          <span className="status-pill success">
-            <LockKeyhole size={15} />
-            Private room
-          </span>
-          <span className="status-pill neutral">
-            <Mic size={15} />
-            Voice consult
-          </span>
-          <span className="status-pill warning">
-            <Clock3 size={15} />
-            Timed cases
-          </span>
-        </div>
-      </header>
+      {screen === "lobby" && (
+        <header className="topbar">
+          <div className="topbar-copy">
+            <p className="eyebrow">CaseRoom</p>
+            <h1>Clinical simulation room</h1>
+            <p className="topbar-note">
+              Practice a focused patient encounter, make decisions under pressure, then review the debrief.
+            </p>
+          </div>
+          <div className="status-strip">
+            <span className="status-pill success">
+              <LockKeyhole size={15} />
+              On this device
+            </span>
+            <span className="status-pill neutral">
+              <Mic size={15} />
+              Voice practice
+            </span>
+            <span className="status-pill warning">
+              <Clock3 size={15} />
+              Timed drills
+            </span>
+          </div>
+        </header>
+      )}
 
       {screen === "lobby" && (
         <section className="hero-grid">
@@ -713,8 +715,14 @@ export function App() {
             </div>
           </section>
 
-          <aside className="card">
-            <p className="eyebrow">Saved Work</p>
+          <aside className="card saved-work panel-span-2">
+            <div>
+              <p className="eyebrow">Saved Work</p>
+              <h2>Continue where you left off</h2>
+              <p className="muted">
+                Draft encounters and completed debriefs stay available on this device for repeat practice.
+              </p>
+            </div>
             {draftRuns.length > 0 ? (
               <>
                 <h2>Continue encounter</h2>
@@ -745,25 +753,30 @@ export function App() {
                 </ul>
               </>
             ) : null}
-            <h2>{draftRuns.length > 0 ? "Recent debriefs" : "Your recent debriefs"}</h2>
-            {completedRuns.length === 0 ? (
-              <p className="muted">Completed encounters will appear here.</p>
-            ) : (
-              <ul className="history-list">
-                {completedRuns.map((item) => (
-                  <li key={`${item.caseId}-${item.finishedAt}`}>
-                    <button
-                      className="history-entry"
-                      onClick={() => openSavedDebrief(item)}
-                      type="button"
-                    >
-                      <strong>{item.report.title}</strong>
-                      <span>{formatPercent(item.report.overallScore)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div>
+              <h2>{draftRuns.length > 0 ? "Recent debriefs" : "Your recent debriefs"}</h2>
+              {completedRuns.length === 0 ? (
+                <div className="saved-empty">
+                  <FileText size={24} />
+                  <p>Completed encounters will appear here after your first debrief.</p>
+                </div>
+              ) : (
+                <ul className="history-list">
+                  {completedRuns.map((item) => (
+                    <li key={`${item.caseId}-${item.finishedAt}`}>
+                      <button
+                        className="history-entry"
+                        onClick={() => openSavedDebrief(item)}
+                        type="button"
+                      >
+                        <strong>{item.report.title}</strong>
+                        <span>{formatPercent(item.report.overallScore)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </aside>
         </main>
       )}
