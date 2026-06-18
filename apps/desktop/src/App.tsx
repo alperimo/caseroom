@@ -15,6 +15,7 @@ import {
   probeRuntimeStatus,
   speakText,
   startVoiceCapture,
+  warmRuntimeModel,
   type VoiceCaptureController,
   type RuntimeStatus
 } from "@caseroom/qvac-runtime";
@@ -50,13 +51,23 @@ export function App() {
   const [exportState, setExportState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const voiceControllerRef = useRef<VoiceCaptureController | null>(null);
+  const warmupAttemptedRef = useRef(false);
 
   function productizeStatusLabel(label: string): string {
+    if (label.includes("bridge reachable")) {
+      return "Private AI standby";
+    }
+    if (label.includes("local QVAC completion")) {
+      return "Private replies live";
+    }
+    if (label.includes("QVAC on-demand load")) {
+      return "Preparing AI";
+    }
     if (label.includes("QVAC") || label.includes("model")) {
       return "Private AI ready";
     }
     if (label.includes("fallback")) {
-      return "Private mode";
+      return "Clinical fallback";
     }
     if (label.includes("persistent local embeddings")) {
       return "Knowledge ready";
@@ -72,6 +83,15 @@ export function App() {
     }
     if (label.includes("voice loop")) {
       return "Voice available";
+    }
+    if (label.includes("mic input ready")) {
+      return "Mic ready";
+    }
+    if (label.includes("spoken reply ready")) {
+      return "Voice output only";
+    }
+    if (label.includes("text fallback only")) {
+      return "Text mode";
     }
     return label;
   }
@@ -102,6 +122,22 @@ export function App() {
           ...status,
           storageMode: getStorageModeLabel()
         });
+      }
+
+      if (status.completionMode === "QVAC on-demand load" && !warmupAttemptedRef.current) {
+        warmupAttemptedRef.current = true;
+        try {
+          await warmRuntimeModel();
+          const warmedStatus = await probeRuntimeStatus();
+          if (!cancelled) {
+            setRuntime({
+              ...warmedStatus,
+              storageMode: getStorageModeLabel()
+            });
+          }
+        } catch {
+          // Keep fallback/runtime probe state if warmup fails.
+        }
       }
     }
 
@@ -270,9 +306,13 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
+        <div className="topbar-copy">
           <p className="eyebrow">CaseRoom</p>
           <h1>Private clinical rehearsal for difficult patient encounters</h1>
+          <p className="topbar-note">
+            Short, high-stakes practice rooms with on-device knowledge, saved sessions, and
+            structured debriefs.
+          </p>
         </div>
         <div className="status-strip">
           <span className="status-pill success">{productizeStatusLabel(runtime.modelMode)}</span>
@@ -282,24 +322,36 @@ export function App() {
         </div>
       </header>
 
-      <section className="hero-grid">
-        <div className="hero-copy card">
-          <p className="eyebrow">Today&apos;s Room</p>
-          <h2>Step into a consultation, read the doorway brief, and manage the encounter end to end.</h2>
-          <p>
-            Practice focused questioning, urgent triage, bedside explanation, and safe planning in
-            a calm room designed for repeated rehearsal.
-          </p>
-        </div>
-        <div className="hero-copy card">
-          <p className="eyebrow">What You Can Do</p>
-          <ul className="compact-list">
-            <li>Choose from curated clinic, emergency, internal medicine, and respiratory cases</li>
-            <li>Speak or type naturally, then examine, test, diagnose, and plan</li>
-            <li>Finish with a structured debrief and source-backed feedback</li>
-          </ul>
-        </div>
-      </section>
+      {screen === "lobby" && (
+        <section className="hero-grid">
+          <div className="hero-copy card compact-hero">
+            <p className="eyebrow">Today&apos;s Room</p>
+            <h2>Choose a case, enter the room, finish with a saved debrief.</h2>
+            <div className="hero-metrics">
+              <div className="metric-tile">
+                <span>Cases</span>
+                <strong>{medicalCasePack.length}</strong>
+              </div>
+              <div className="metric-tile">
+                <span>Knowledge</span>
+                <strong>{productizeStatusLabel(runtime.retrievalMode)}</strong>
+              </div>
+              <div className="metric-tile">
+                <span>Sessions</span>
+                <strong>{history.length}</strong>
+              </div>
+            </div>
+          </div>
+          <div className="hero-copy card quick-steps">
+            <p className="eyebrow">Flow</p>
+            <div className="step-row">
+              <span>Pick case</span>
+              <span>Run consult</span>
+              <span>Save report</span>
+            </div>
+          </div>
+        </section>
+      )}
 
       {screen === "lobby" && (
         <main className="page-grid">
@@ -325,6 +377,7 @@ export function App() {
                       <span key={flag}>{flag}</span>
                     ))}
                   </div>
+                  <span className="case-cta">Open brief</span>
                 </button>
               ))}
             </div>
@@ -399,34 +452,47 @@ export function App() {
         <main className="room-grid">
           <section className="card room-scene">
             <div className="scene-banner">
-              <p className="eyebrow">2.5D Consultation Room</p>
+              <p className="eyebrow">In Room</p>
               <span className="status-pill neutral">
-                Persona affect: {selectedCase.hiddenCase.patientAffect}
+                {selectedCase.hiddenCase.patientAffect}
               </span>
             </div>
-            <div className="scene-stage">
-              <div className="room-plane">
-                <div className="monitor-panel">
-                  <strong>Vitals Monitor</strong>
-                  <span>{selectedCase.brief.visibleVitals.bp}</span>
-                  <span>{selectedCase.brief.visibleVitals.hr} bpm</span>
-                  <span>{session.progress.remainingMinutes} min left</span>
+            <div className="patient-summary-card">
+              <div>
+                <p className="eyebrow">Patient</p>
+                <h2>{selectedCase.brief.patientName}</h2>
+                <p className="lead">{selectedCase.brief.chiefComplaint}</p>
+              </div>
+              <div className="room-meta-row">
+                <span className={`status-pill risk-${session.progress.riskLevel}`}>
+                  Risk {session.progress.riskLevel}
+                </span>
+                <span className="status-pill neutral">{session.progress.remainingMinutes} min left</span>
+                <span className="status-pill neutral">{session.actionLog.length} actions logged</span>
+              </div>
+            </div>
+            <div className="room-support-grid">
+              <div className="monitor-panel">
+                <strong>Vitals</strong>
+                <div className="vitals-grid">
+                  <span>HR {selectedCase.brief.visibleVitals.hr}</span>
+                  <span>BP {selectedCase.brief.visibleVitals.bp}</span>
+                  <span>RR {selectedCase.brief.visibleVitals.rr}</span>
+                  <span>SpO2 {selectedCase.brief.visibleVitals.spo2}</span>
                 </div>
-                <div className="patient-panel">
-                  <p className="eyebrow">Patient</p>
-                  <h3>{selectedCase.brief.patientName}</h3>
-                  <p>{session.latestPatientMood}</p>
-                  <span className="voice-indicator">{runtime.voiceMode}</span>
-                  <span className={`status-pill risk-${session.progress.riskLevel}`}>
-                    Risk {session.progress.riskLevel}
-                  </span>
-                  {voiceError ? <p className="voice-error">{voiceError}</p> : null}
-                </div>
-                <div className="desk-panel">
-                  <strong>Clinician station</strong>
-                  <p>{session.actionLog.length} logged actions</p>
-                  <p>{session.progress.stateLabel}</p>
-                </div>
+              </div>
+              <div className="patient-panel">
+                <strong>Patient state</strong>
+                <p>{session.latestPatientMood}</p>
+                <span className="voice-indicator">{productizeStatusLabel(runtime.voiceMode)}</span>
+                {voiceError ? <p className="voice-error">{voiceError}</p> : null}
+              </div>
+              <div className="desk-panel">
+                <strong>Next focus</strong>
+                <p>{session.progress.stateLabel}</p>
+                <span className="status-pill neutral">
+                  {Math.round(session.progress.completionRatio * 100)}% complete
+                </span>
               </div>
             </div>
           </section>
@@ -469,15 +535,13 @@ export function App() {
                     ? "Stop listening"
                     : voiceState === "processing"
                       ? "Listening..."
-                      : "Speak"}
+                      : "Use microphone"}
                 </button>
                 <button className="primary-button" onClick={sendPrompt} type="button">
                   Send
                 </button>
               </div>
-              <p className="muted">
-                Voice state: {voiceState}. You can switch between speaking and typing at any time.
-              </p>
+              <p className="muted">Type freely or switch to voice when microphone access is available.</p>
             </div>
           </section>
 
@@ -525,7 +589,7 @@ export function App() {
                   ))}
                 </ul>
               ) : (
-                <p className="muted">No urgent escalation signals surfaced yet.</p>
+                <p className="muted">No urgent escalation flags surfaced yet.</p>
               )}
             </div>
           </aside>

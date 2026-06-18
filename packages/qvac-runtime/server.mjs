@@ -30,6 +30,8 @@ const supportedModels = {
 
 let modelId = null;
 let embeddingModelId = null;
+let modelLoadPromise = null;
+let embeddingLoadPromise = null;
 let activeModelName = requestedModel;
 let lastLoadError = null;
 let ragStatus = "initializing";
@@ -40,48 +42,73 @@ async function ensureModelLoaded() {
   if (modelId) {
     return modelId;
   }
+  if (modelLoadPromise) {
+    return modelLoadPromise;
+  }
 
   const modelSrc = supportedModels[activeModelName] ?? supportedModels.LLAMA_3_2_1B_INST_Q4_0;
   if (!supportedModels[activeModelName]) {
     activeModelName = "LLAMA_3_2_1B_INST_Q4_0";
   }
 
-  try {
-    modelId = await loadModel({
-      modelSrc,
-      modelConfig: { ctx_size: 4096 },
-      onProgress: (progress) => {
-        console.log(`[qvac] loading ${activeModelName}: ${progress.percentage.toFixed(1)}%`);
+  modelLoadPromise = (async () => {
+    try {
+      modelId = await loadModel({
+        modelSrc,
+        modelConfig: { ctx_size: 4096 },
+        onProgress: (progress) => {
+          console.log(`[qvac] loading ${activeModelName}: ${progress.percentage.toFixed(1)}%`);
+        }
+      });
+      lastLoadError = null;
+      console.log(`[qvac] model ready: ${activeModelName} (${modelId})`);
+      return modelId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const registeredMatch = message.match(/Model with ID "([^"]+)" is already registered/);
+      if (registeredMatch) {
+        modelId = registeredMatch[1];
+        lastLoadError = null;
+        return modelId;
       }
-    });
-    lastLoadError = null;
-    console.log(`[qvac] model ready: ${activeModelName} (${modelId})`);
-    return modelId;
-  } catch (error) {
-    lastLoadError = error instanceof Error ? error.message : String(error);
-    modelId = null;
-    throw error;
-  }
+      lastLoadError = message;
+      modelId = null;
+      throw error;
+    } finally {
+      modelLoadPromise = null;
+    }
+  })();
+
+  return modelLoadPromise;
 }
 
 async function ensureEmbeddingModelLoaded() {
   if (embeddingModelId) {
     return embeddingModelId;
   }
+  if (embeddingLoadPromise) {
+    return embeddingLoadPromise;
+  }
 
-  embeddingModelId = await loadModel({
-    modelSrc: GTE_LARGE_FP16,
-    modelType: "llamacpp-embedding",
-    modelConfig: {
-      gpuLayers: 99,
-      device: "gpu"
-    },
-    onProgress: (progress) => {
-      console.log(`[qvac] loading embeddings: ${progress.percentage.toFixed(1)}%`);
-    }
+  embeddingLoadPromise = (async () => {
+    embeddingModelId = await loadModel({
+      modelSrc: GTE_LARGE_FP16,
+      modelType: "llamacpp-embedding",
+      modelConfig: {
+        gpuLayers: 99,
+        device: "gpu"
+      },
+      onProgress: (progress) => {
+        console.log(`[qvac] loading embeddings: ${progress.percentage.toFixed(1)}%`);
+      }
+    });
+    console.log(`[qvac] embedding model ready (${embeddingModelId})`);
+    return embeddingModelId;
+  })().finally(() => {
+    embeddingLoadPromise = null;
   });
-  console.log(`[qvac] embedding model ready (${embeddingModelId})`);
-  return embeddingModelId;
+
+  return embeddingLoadPromise;
 }
 
 async function loadRagManifest() {
@@ -317,6 +344,28 @@ const server = http.createServer(async (request, response) => {
       lastRagError,
       ragWorkspace
     });
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/warmup") {
+    try {
+      await ensureModelLoaded();
+      sendJson(response, 200, {
+        ok: true,
+        mode: "qvac",
+        modelName: activeModelName,
+        modelLoaded: true
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      sendJson(response, 500, {
+        ok: false,
+        mode: "fallback-required",
+        error: message,
+        modelName: activeModelName,
+        modelLoaded: false
+      });
+    }
     return;
   }
 

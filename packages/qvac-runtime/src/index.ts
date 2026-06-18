@@ -363,6 +363,17 @@ export async function probeRuntimeStatus(): Promise<RuntimeStatus> {
   }
 }
 
+export async function warmRuntimeModel(): Promise<void> {
+  const response = await fetch(`${resolveRuntimeUrl()}/warmup`, {
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? `Warmup failed with ${response.status}.`);
+  }
+}
+
 export function startVoiceCapture(options: VoiceCaptureOptions): VoiceCaptureController | null {
   const SpeechRecognition = getSpeechRecognitionConstructor();
   if (!SpeechRecognition) {
@@ -411,7 +422,7 @@ export function startVoiceCapture(options: VoiceCaptureOptions): VoiceCaptureCon
   recognition.onerror = (event) => {
     const readableError =
       event.error === "not-allowed"
-        ? "Microphone access was denied."
+        ? "Microphone access is blocked. Continue with typing or re-enable the microphone in your browser settings."
         : event.error === "no-speech"
           ? "No speech was detected."
           : `Speech recognition failed: ${event.error}.`;

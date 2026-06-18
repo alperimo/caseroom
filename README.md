@@ -44,6 +44,7 @@ npm run test
 - The desktop package now includes a real Electron `main`/`preload` shell and can open the built renderer with `npm run start --workspace @caseroom/desktop`.
 - Completed encounters are stored in a local SQLite database under the app's Electron user-data directory. The browser `localStorage` path remains only as a fallback when the renderer is opened outside Electron.
 - The `packages/qvac-runtime` package now contains both the browser-safe adapter and a Node-side QVAC bridge process. The bridge uses `@qvac/sdk` for patient text completion.
+- When the bridge is reachable but the patient model is still cold, the app now requests a background warmup so the first encounter turn is less likely to stall.
 - The bridge also provisions a persistent local RAG workspace using QVAC embeddings and workspace storage. Debrief citations fall back to bundled static citations if the local RAG workspace is unavailable.
 - Voice input/output currently uses browser speech APIs in the renderer as the fastest local demo path. The adapter surface is kept separate so QVAC ASR/TTS can replace it later.
 - No cloud services are required for the current demo path.
