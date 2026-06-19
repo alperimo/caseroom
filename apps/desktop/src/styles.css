@@ -1663,10 +1663,10 @@ textarea {
 
 .desk-table {
   position: absolute;
-  left: 36%;
-  bottom: 12%;
-  width: 150px;
-  min-height: 78px;
+  left: 15%;
+  bottom: 23%;
+  width: 142px;
+  min-height: 72px;
   border: 5px solid #56321f;
   background: #c98248;
   color: #2d1d13;
@@ -1893,9 +1893,9 @@ textarea {
 }
 
 .simulation-room-full .desk-table {
-  left: 43.5%;
-  bottom: 11%;
-  z-index: 6;
+  left: 13%;
+  bottom: 23%;
+  z-index: 7;
 }
 
 .scene-record-overlay,
