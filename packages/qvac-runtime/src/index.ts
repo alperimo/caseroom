@@ -98,6 +98,10 @@ function resolveRuntimeUrl(): string {
   return defaultRuntimeUrl;
 }
 
+function isStrictQvacMode(): boolean {
+  return typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_STRICT_QVAC === "1";
+}
+
 function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
   if (typeof window === "undefined") {
     return null;
@@ -438,6 +442,9 @@ async function answerHistory(session: EncounterSession, prompt: string): Promise
     const next = applyPromptSignals(session, prompt);
     return addAction(appendTurn(next, "patient", payload.reply), "history");
   } catch {
+    if (isStrictQvacMode()) {
+      throw new Error("Strict QVAC mode is enabled and patient completion failed.");
+    }
     return answerHistoryFallback(session, prompt);
   }
 }
@@ -495,7 +502,7 @@ export async function generatePatientTurn(
 }
 
 export async function finishEncounter(session: EncounterSession): Promise<DebriefReport> {
-  const report = evaluateEncounter(session);
+  let report = evaluateEncounter(session);
   try {
     const response = await fetch(`${resolveRuntimeUrl()}/rag/search`, {
       method: "POST",
@@ -506,6 +513,9 @@ export async function finishEncounter(session: EncounterSession): Promise<Debrie
     });
 
     if (!response.ok) {
+      if (isStrictQvacMode()) {
+        throw new Error(`Strict QVAC mode requires RAG; status ${response.status}.`);
+      }
       return report;
     }
 
@@ -514,10 +524,13 @@ export async function finishEncounter(session: EncounterSession): Promise<Debrie
     };
 
     if (!payload.citations || payload.citations.length === 0) {
+      if (isStrictQvacMode()) {
+        throw new Error("Strict QVAC mode requires non-empty RAG citations.");
+      }
       return report;
     }
 
-    return {
+    report = {
       ...report,
       citations: payload.citations.map((citation) => ({
         id: citation.id,
@@ -525,7 +538,54 @@ export async function finishEncounter(session: EncounterSession): Promise<Debrie
         excerpt: citation.excerpt
       }))
     };
-  } catch {
+  } catch (error) {
+    if (isStrictQvacMode()) {
+      throw error;
+    }
+    return report;
+  }
+
+  try {
+    const response = await fetch(`${resolveRuntimeUrl()}/evaluate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ session, report, citations: report.citations })
+    });
+
+    if (!response.ok) {
+      if (isStrictQvacMode()) {
+        throw new Error(`Strict QVAC mode requires evaluator completion; status ${response.status}.`);
+      }
+      return report;
+    }
+
+    const payload = (await response.json()) as {
+      evaluator?: {
+        summary?: string;
+        strengths?: string[];
+        gaps?: string[];
+      } | null;
+    };
+
+    if (!payload.evaluator) {
+      if (isStrictQvacMode()) {
+        throw new Error("Strict QVAC mode requires evaluator output.");
+      }
+      return report;
+    }
+
+    return {
+      ...report,
+      summary: payload.evaluator.summary ?? report.summary,
+      strengths: payload.evaluator.strengths?.length ? payload.evaluator.strengths : report.strengths,
+      gaps: payload.evaluator.gaps?.length ? payload.evaluator.gaps : report.gaps
+    };
+  } catch (error) {
+    if (isStrictQvacMode()) {
+      throw error;
+    }
     return report;
   }
 }
@@ -930,7 +990,7 @@ function startWebSpeechCapture(options: VoiceCaptureOptions): VoiceCaptureContro
 
 export function startVoiceCapture(options: VoiceCaptureOptions): VoiceCaptureController | null {
   cancelSpeech();
-  return startQvacVoiceCapture(options) ?? startWebSpeechCapture(options);
+  return startQvacVoiceCapture(options) ?? (isStrictQvacMode() ? null : startWebSpeechCapture(options));
 }
 
 export async function speakText(text: string): Promise<void> {
@@ -949,6 +1009,9 @@ export async function speakText(text: string): Promise<void> {
     await speakWithQvacTts(cleanText);
     return;
   } catch {
+    if (isStrictQvacMode()) {
+      throw new Error("Strict QVAC mode is enabled and QVAC TTS failed.");
+    }
     // Fall through to browser speech synthesis if QVAC TTS is cold or unavailable.
   }
 

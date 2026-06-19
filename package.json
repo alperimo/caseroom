@@ -16,7 +16,7 @@
     "typecheck": "npm run typecheck --workspace @caseroom/desktop",
     "test": "vitest run packages/simulation-core/src/index.test.ts packages/qvac-runtime/src/index.test.ts",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
-    "evidence:bundle": "node scripts/collect-hackathon-artifacts.mjs"
+    "evidence:bundle": "node scripts/collect-submission-artifacts.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

@@ -494,7 +494,13 @@ export function App() {
       return;
     }
 
-    const response = await generatePatientTurn(session, promptText.trim());
+    let response: Awaited<ReturnType<typeof generatePatientTurn>>;
+    try {
+      response = await generatePatientTurn(session, promptText.trim());
+    } catch (error) {
+      setVoiceError(error instanceof Error ? error.message : String(error));
+      return;
+    }
     setSession(response.session);
     const latestTurn = response.session.transcript[response.session.transcript.length - 1];
     if (latestTurn?.speaker === "patient") {
@@ -567,7 +573,13 @@ export function App() {
       return;
     }
 
-    const report = await finishEncounter(session);
+    let report: Awaited<ReturnType<typeof finishEncounter>>;
+    try {
+      report = await finishEncounter(session);
+    } catch (error) {
+      setVoiceError(error instanceof Error ? error.message : String(error));
+      return;
+    }
     const entry: DebriefRun = {
       id: session.id,
       caseId: session.scenario.id,

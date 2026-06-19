@@ -25,9 +25,13 @@ import { bundledRagDocuments, ragWorkspaceVersion } from "./rag-documents.mjs";
 
 const port = Number(process.env.CASE_ROOM_QVAC_PORT ?? 4545);
 const requestedModel = process.env.CASE_ROOM_QVAC_MODEL ?? "LLAMA_3_2_1B_INST_Q4_0";
+const requestedModelPath = process.env.CASE_ROOM_QVAC_MODEL_PATH;
+const strictQvacMode = process.env.CASE_ROOM_STRICT_QVAC === "1";
 const ragWorkspace = "caseroom-medical-osce";
 const ragManifestDir = path.resolve(process.cwd(), ".caseroom", "rag");
 const ragManifestPath = path.join(ragManifestDir, `${ragWorkspace}.json`);
+const performanceLogDir = path.resolve(process.cwd(), ".artifacts", "performance");
+const performanceLogPath = path.join(performanceLogDir, "inference-events.jsonl");
 
 const supportedModels = {
   LLAMA_3_2_1B_INST_Q4_0,
@@ -45,7 +49,7 @@ let modelLoadPromise = null;
 let embeddingLoadPromise = null;
 let ttsLoadPromise = null;
 let asrLoadPromise = null;
-let activeModelName = requestedModel;
+let activeModelName = requestedModelPath ? `local:${path.basename(requestedModelPath)}` : requestedModel;
 let lastLoadError = null;
 let ragStatus = "initializing";
 let ragReady = false;
@@ -56,6 +60,54 @@ let asrReady = false;
 let lastAsrError = null;
 
 const ttsSampleRate = 44100;
+
+function approximateTokens(text) {
+  return Math.max(1, Math.ceil(String(text ?? "").trim().split(/\s+/).filter(Boolean).length * 1.35));
+}
+
+async function logInferenceEvent(event) {
+  const record = {
+    timestamp: new Date().toISOString(),
+    strictQvacMode,
+    ...event
+  };
+  try {
+    await fs.mkdir(performanceLogDir, { recursive: true });
+    await fs.appendFile(performanceLogPath, `${JSON.stringify(record)}\n`, "utf8");
+  } catch (error) {
+    console.error("[qvac] could not write inference log:", error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function measured(operation, details, fn) {
+  const startedAt = performance.now();
+  try {
+    const result = await fn();
+    const durationMs = Math.round(performance.now() - startedAt);
+    await logInferenceEvent({
+      operation,
+      ok: true,
+      durationMs,
+      ...details,
+      ...(details.outputText
+        ? {
+            outputTokensApprox: approximateTokens(details.outputText),
+            tokensPerSecondApprox: Number((approximateTokens(details.outputText) / Math.max(0.001, durationMs / 1000)).toFixed(2))
+          }
+        : {})
+    });
+    return result;
+  } catch (error) {
+    await logInferenceEvent({
+      operation,
+      ok: false,
+      durationMs: Math.round(performance.now() - startedAt),
+      ...details,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    throw error;
+  }
+}
 
 function createWavHeader(dataLength, sampleRate) {
   const header = Buffer.alloc(44);
@@ -92,20 +144,27 @@ async function ensureModelLoaded() {
     return modelLoadPromise;
   }
 
-  const modelSrc = supportedModels[activeModelName] ?? supportedModels.LLAMA_3_2_1B_INST_Q4_0;
-  if (!supportedModels[activeModelName]) {
+  const modelSrc = requestedModelPath
+    ? requestedModelPath
+    : supportedModels[activeModelName] ?? supportedModels.LLAMA_3_2_1B_INST_Q4_0;
+  if (!requestedModelPath && !supportedModels[activeModelName]) {
     activeModelName = "LLAMA_3_2_1B_INST_Q4_0";
   }
 
   modelLoadPromise = (async () => {
     try {
-      modelId = await loadModel({
-        modelSrc,
-        modelConfig: { ctx_size: 4096 },
-        onProgress: (progress) => {
-          console.log(`[qvac] loading ${activeModelName}: ${progress.percentage.toFixed(1)}%`);
-        }
-      });
+      modelId = await measured(
+        "model.load",
+        { modelName: activeModelName, modelType: "completion" },
+        () => loadModel({
+          modelSrc,
+          ...(requestedModelPath ? { modelType: "llm" } : {}),
+          modelConfig: { ctx_size: 4096 },
+          onProgress: (progress) => {
+            console.log(`[qvac] loading ${activeModelName}: ${progress.percentage.toFixed(1)}%`);
+          }
+        }),
+      );
       lastLoadError = null;
       console.log(`[qvac] model ready: ${activeModelName} (${modelId})`);
       return modelId;
@@ -137,17 +196,21 @@ async function ensureEmbeddingModelLoaded() {
   }
 
   embeddingLoadPromise = (async () => {
-    embeddingModelId = await loadModel({
-      modelSrc: GTE_LARGE_FP16,
-      modelType: "llamacpp-embedding",
-      modelConfig: {
-        gpuLayers: 99,
-        device: "gpu"
-      },
-      onProgress: (progress) => {
-        console.log(`[qvac] loading embeddings: ${progress.percentage.toFixed(1)}%`);
-      }
-    });
+    embeddingModelId = await measured(
+      "model.load",
+      { modelName: "GTE_LARGE_FP16", modelType: "embedding" },
+      () => loadModel({
+        modelSrc: GTE_LARGE_FP16,
+        modelType: "llamacpp-embedding",
+        modelConfig: {
+          gpuLayers: 99,
+          device: "gpu"
+        },
+        onProgress: (progress) => {
+          console.log(`[qvac] loading embeddings: ${progress.percentage.toFixed(1)}%`);
+        }
+      }),
+    );
     console.log(`[qvac] embedding model ready (${embeddingModelId})`);
     return embeddingModelId;
   })().finally(() => {
@@ -167,19 +230,23 @@ async function ensureTtsModelLoaded() {
 
   ttsLoadPromise = (async () => {
     try {
-      ttsModelId = await loadModel({
-        modelSrc: TTS_EN_SUPERTONIC_Q8_0,
-        modelConfig: {
-          ttsEngine: "supertonic",
-          language: "en",
-          voice: "F1",
-          ttsSpeed: 1.03,
-          ttsNumInferenceSteps: 5
-        },
-        onProgress: (progress) => {
-          console.log(`[qvac] loading Supertonic TTS: ${progress.percentage.toFixed(1)}%`);
-        }
-      });
+      ttsModelId = await measured(
+        "model.load",
+        { modelName: "TTS_EN_SUPERTONIC_Q8_0", modelType: "tts" },
+        () => loadModel({
+          modelSrc: TTS_EN_SUPERTONIC_Q8_0,
+          modelConfig: {
+            ttsEngine: "supertonic",
+            language: "en",
+            voice: "F1",
+            ttsSpeed: 1.03,
+            ttsNumInferenceSteps: 5
+          },
+          onProgress: (progress) => {
+            console.log(`[qvac] loading Supertonic TTS: ${progress.percentage.toFixed(1)}%`);
+          }
+        }),
+      );
       ttsReady = true;
       lastTtsError = null;
       console.log(`[qvac] TTS ready (${ttsModelId})`);
@@ -215,27 +282,31 @@ async function ensureAsrModelLoaded() {
 
   asrLoadPromise = (async () => {
     try {
-      asrModelId = await loadModel({
-        modelSrc: WHISPER_EN_TINY_Q8_0,
-        modelConfig: {
-          vadModelSrc: VAD_SILERO_5_1_2,
-          language: "en",
-          no_timestamps: true,
-          suppress_blank: true,
-          suppress_nst: true,
-          temperature: 0.0,
-          vad_params: {
-            threshold: 0.6,
-            min_speech_duration_ms: 250,
-            min_silence_duration_ms: 650,
-            max_speech_duration_s: 14.0,
-            speech_pad_ms: 180
+      asrModelId = await measured(
+        "model.load",
+        { modelName: "WHISPER_EN_TINY_Q8_0", modelType: "asr", vadModelName: "VAD_SILERO_5_1_2" },
+        () => loadModel({
+          modelSrc: WHISPER_EN_TINY_Q8_0,
+          modelConfig: {
+            vadModelSrc: VAD_SILERO_5_1_2,
+            language: "en",
+            no_timestamps: true,
+            suppress_blank: true,
+            suppress_nst: true,
+            temperature: 0.0,
+            vad_params: {
+              threshold: 0.6,
+              min_speech_duration_ms: 250,
+              min_silence_duration_ms: 650,
+              max_speech_duration_s: 14.0,
+              speech_pad_ms: 180
+            }
+          },
+          onProgress: (progress) => {
+            console.log(`[qvac] loading Whisper ASR: ${progress.percentage.toFixed(1)}%`);
           }
-        },
-        onProgress: (progress) => {
-          console.log(`[qvac] loading Whisper ASR: ${progress.percentage.toFixed(1)}%`);
-        }
-      });
+        }),
+      );
       asrReady = true;
       lastAsrError = null;
       console.log(`[qvac] ASR ready (${asrModelId})`);
@@ -309,10 +380,20 @@ async function ensureRagWorkspace() {
         // Ignore missing workspace on first boot.
       }
 
-      const { embedding } = await embed({
-        modelId: readyEmbeddingModelId,
-        text: bundledRagDocuments.map((doc) => doc.content)
-      });
+      const documents = bundledRagDocuments.map((doc) => doc.content);
+      const { embedding } = await measured(
+        "rag.embed",
+        {
+          modelName: "GTE_LARGE_FP16",
+          modelId: readyEmbeddingModelId,
+          documentCount: documents.length,
+          inputTokensApprox: documents.reduce((sum, item) => sum + approximateTokens(item), 0)
+        },
+        () => embed({
+          modelId: readyEmbeddingModelId,
+          text: documents
+        }),
+      );
 
       await ragSaveEmbeddings({
         workspace: ragWorkspace,
@@ -399,13 +480,118 @@ async function generatePatientReply(session, prompt) {
   }
 
   const readyModelId = await ensureModelLoaded();
+  const history = buildHistory(session, prompt);
+  const startedAt = performance.now();
   const run = completion({
     modelId: readyModelId,
-    history: buildHistory(session, prompt),
+    history,
     stream: false
   });
   const final = await run.final;
-  return sanitizePatientReply(String(final.contentText ?? ""), session);
+  const rawReply = String(final.contentText ?? "");
+  const reply = sanitizePatientReply(rawReply, session);
+  const durationMs = Math.round(performance.now() - startedAt);
+  await logInferenceEvent({
+    operation: "completion.patient_turn",
+    ok: true,
+    modelName: activeModelName,
+    modelId: readyModelId,
+    caseId: session.scenario.id,
+    promptPreview: prompt.slice(0, 220),
+    inputTokensApprox: approximateTokens(history.map((turn) => turn.content).join(" ")),
+    outputTokensApprox: approximateTokens(reply),
+    durationMs,
+    ttftMs: null,
+    tokensPerSecondApprox: Number((approximateTokens(reply) / Math.max(0.001, durationMs / 1000)).toFixed(2)),
+    sanitized: rawReply.trim() !== reply.trim()
+  });
+  return reply;
+}
+
+function buildEvaluatorPrompt(session, report, citations) {
+  return [
+    "You are an attending examiner for an educational medical simulation.",
+    "Use only the transcript, action log, case rubric, hidden case facts, and retrieved local source snippets.",
+    "Do not give real medical advice to a real patient. This is simulation feedback only.",
+    "Return strict JSON with keys: summary, strengths, gaps.",
+    "summary: one concise learner-facing sentence.",
+    "strengths: array of up to 3 concrete strengths.",
+    "gaps: array of up to 4 concrete next-improvement items.",
+    "",
+    `Case: ${session.scenario.title}`,
+    `Diagnosis truth: ${session.scenario.hiddenCase.diagnosis}`,
+    `Must ask: ${session.scenario.hiddenCase.mustAsk.join(", ")}`,
+    `Revealed topics: ${session.revealedTopics.join(", ") || "none"}`,
+    `Action log: ${session.actionLog.join(", ") || "none"}`,
+    `Deterministic score: ${report.overallScore}`,
+    `Deterministic strengths: ${report.strengths.join(" | ")}`,
+    `Deterministic gaps: ${report.gaps.join(" | ")}`,
+    `Citations: ${citations.map((item) => `${item.title}: ${item.excerpt}`).join(" | ")}`,
+    "Transcript:",
+    session.transcript.map((turn) => `${turn.speaker}: ${turn.text}`).join("\n")
+  ].join("\n");
+}
+
+function extractJsonObject(text) {
+  const trimmed = String(text ?? "").trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const match = trimmed.match(/\{[\s\S]*\}/);
+    if (!match) {
+      throw new Error("Evaluator did not return JSON.");
+    }
+    return JSON.parse(match[0]);
+  }
+}
+
+async function evaluateDebriefWithQvac(session, report, citations) {
+  const readyModelId = await ensureModelLoaded();
+  const prompt = buildEvaluatorPrompt(session, report, citations);
+  const history = [
+    {
+      role: "system",
+      content: "You return only valid JSON for medical simulation debriefs."
+    },
+    {
+      role: "user",
+      content: prompt
+    }
+  ];
+
+  const startedAt = performance.now();
+  const run = completion({
+    modelId: readyModelId,
+    history,
+    stream: false
+  });
+  const final = await run.final;
+  const raw = String(final.contentText ?? "");
+  const parsed = extractJsonObject(raw);
+  const durationMs = Math.round(performance.now() - startedAt);
+  await logInferenceEvent({
+    operation: "completion.evaluator_debrief",
+    ok: true,
+    modelName: activeModelName,
+    modelId: readyModelId,
+    caseId: session.scenario.id,
+    promptPreview: prompt.slice(0, 220),
+    inputTokensApprox: approximateTokens(prompt),
+    outputTokensApprox: approximateTokens(raw),
+    durationMs,
+    ttftMs: null,
+    tokensPerSecondApprox: Number((approximateTokens(raw) / Math.max(0.001, durationMs / 1000)).toFixed(2))
+  });
+
+  return {
+    summary: typeof parsed.summary === "string" ? parsed.summary : report.summary,
+    strengths: Array.isArray(parsed.strengths) && parsed.strengths.length > 0
+      ? parsed.strengths.filter((item) => typeof item === "string").slice(0, 3)
+      : report.strengths,
+    gaps: Array.isArray(parsed.gaps) && parsed.gaps.length > 0
+      ? parsed.gaps.filter((item) => typeof item === "string").slice(0, 4)
+      : report.gaps
+  };
 }
 
 function sanitizePatientReply(reply, session) {
@@ -477,12 +663,24 @@ async function searchRelevantDocuments(session) {
   }
 
   const readyEmbeddingModelId = await ensureEmbeddingModelLoaded();
-  const results = await ragSearch({
-    workspace: ragWorkspace,
-    modelId: readyEmbeddingModelId,
-    query: buildRetrievalQuery(session),
-    topK: 3
-  });
+  const query = buildRetrievalQuery(session);
+  const results = await measured(
+    "rag.search",
+    {
+      modelName: "GTE_LARGE_FP16",
+      modelId: readyEmbeddingModelId,
+      workspace: ragWorkspace,
+      caseId: session.scenario.id,
+      inputTokensApprox: approximateTokens(query),
+      topK: 3
+    },
+    () => ragSearch({
+      workspace: ragWorkspace,
+      modelId: readyEmbeddingModelId,
+      query,
+      topK: 3
+    }),
+  );
 
   return results.map((result) => {
     const source = bundledRagDocuments.find((doc) => doc.id === result.id);
@@ -534,10 +732,12 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && request.url === "/health") {
-    sendJson(response, 200, {
-      ok: true,
-      mode: "qvac-local-bridge",
-      modelName: activeModelName,
+      sendJson(response, 200, {
+        ok: true,
+        mode: "qvac-local-bridge",
+        strictQvacMode,
+        performanceLogPath,
+        modelName: activeModelName,
       modelLoaded: Boolean(modelId),
       lastLoadError,
       ragStatus,
@@ -598,11 +798,20 @@ const server = http.createServer(async (request, response) => {
         : "";
       const readyAsrModelId = await ensureAsrModelLoaded();
       const audioChunk = Buffer.from(audioBase64, "base64");
-      const text = await transcribe({
-        modelId: readyAsrModelId,
-        audioChunk,
-        prompt: `${asrPromptBase}${lexicalHint}`
-      });
+      const text = await measured(
+        "asr.transcribe",
+        {
+          modelName: "WHISPER_EN_TINY_Q8_0",
+          modelId: readyAsrModelId,
+          audioBytes: audioChunk.byteLength,
+          contextPhraseCount: contextPhrases.length
+        },
+        () => transcribe({
+          modelId: readyAsrModelId,
+          audioChunk,
+          prompt: `${asrPromptBase}${lexicalHint}`
+        }),
+      );
       const transcript = String(text ?? "").replace(/\s+/g, " ").trim();
       sendJson(response, 200, {
         ok: true,
@@ -638,7 +847,16 @@ const server = http.createServer(async (request, response) => {
         inputType: "text",
         stream: false
       });
-      const samples = await ttsResult.buffer;
+      const samples = await measured(
+        "tts.synthesize",
+        {
+          modelName: "TTS_EN_SUPERTONIC_Q8_0",
+          modelId: readyTtsModelId,
+          inputTokensApprox: approximateTokens(text),
+          textPreview: text.slice(0, 220)
+        },
+        () => ttsResult.buffer,
+      );
       const audioData = int16ArrayToBuffer(samples);
       const wavBuffer = Buffer.concat([createWavHeader(audioData.length, ttsSampleRate), audioData]);
       sendJson(response, 200, {
@@ -707,6 +925,33 @@ const server = http.createServer(async (request, response) => {
         ok: false,
         error: message,
         ragReady: false
+      });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/evaluate") {
+    try {
+      const body = await readJson(request);
+      if (!body.session || !body.report) {
+        sendJson(response, 400, { error: "Session and report are required." });
+        return;
+      }
+
+      const citations = Array.isArray(body.citations) ? body.citations : [];
+      const evaluator = await evaluateDebriefWithQvac(body.session, body.report, citations);
+      sendJson(response, 200, {
+        ok: true,
+        mode: "qvac-evaluator",
+        evaluator
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      sendJson(response, strictQvacMode ? 500 : 200, {
+        ok: false,
+        mode: strictQvacMode ? "strict-qvac-failed" : "deterministic-evaluator-fallback",
+        error: message,
+        evaluator: null
       });
     }
     return;
