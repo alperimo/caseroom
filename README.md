@@ -1,6 +1,6 @@
 # CaseRoom
 
-CaseRoom is a local-first medical simulation room for high-stakes OSCE-style training. This repository currently ships a renderer-first MVP scaffold with modular simulation, case-pack, and QVAC adapter layers. Patient text turns can go through a local QVAC bridge in development, while the app keeps a deterministic fallback path for demo reliability.
+CaseRoom is a local-first, voice-first clinical simulation room for high-stakes medical training. Learners enter a 2.5D consultation room and speak with a synthetic patient grounded in local case data, then use in-room exam, tests, impression, plan, and safety-net tools to complete the encounter. Each session ends with a rubric-based debrief and source-backed local citations.
 
 ## Current scope
 
@@ -8,8 +8,8 @@ CaseRoom is a local-first medical simulation room for high-stakes OSCE-style tra
 - Engine-shaped architecture for future room types
 - Local seed cases and local rubric/guideline grounding
 - Lobby, doorway brief, consultation room, and debrief flows
-- Local QVAC text-completion bridge with automatic fallback if the bridge is unavailable
-- Voice loop for live demo use: mic input via local QVAC Whisper ASR when the bridge is running, spoken patient replies via local QVAC TTS, and browser voice fallbacks
+- Local QVAC text-completion bridge with optional strict mode for audited local-inference runs
+- Voice-first interaction: mic input via local QVAC Whisper ASR when the bridge is running, spoken patient replies via local QVAC TTS, and browser voice fallbacks
 - Persistent local embeddings workspace for bundled medical guidance and citation retrieval
 - Local SQLite session persistence for completed encounters inside the Electron shell
 
@@ -60,14 +60,17 @@ If QVAC TTS is unavailable, CaseRoom falls back to the best available local Engl
 
 Speech-to-text is QVAC-backed when the local bridge has been restarted with the latest code. The first ASR use can take longer while Whisper and Silero VAD are loaded or downloaded into the local QVAC cache.
 
-## QVAC bridge configuration
+## QVAC Bridge Configuration
 
 Optional environment variables:
 
 ```bash
 CASE_ROOM_QVAC_PORT=4545
 CASE_ROOM_QVAC_MODEL=LLAMA_3_2_1B_INST_Q4_0
+CASE_ROOM_QVAC_MODEL_PATH=/absolute/path/to/local-model.gguf
+CASE_ROOM_STRICT_QVAC=1
 VITE_CASE_ROOM_QVAC_URL=http://127.0.0.1:4545
+VITE_CASE_ROOM_STRICT_QVAC=1
 ```
 
 Supported built-in model constants currently wired in the bridge:
@@ -78,20 +81,38 @@ Supported built-in model constants currently wired in the bridge:
 - `QWEN3_600M_INST_Q4`
 - `QWEN3_1_7B_INST_Q4`
 
-QVAC SDK medical model note:
+Model selection notes:
 
 - The installed `@qvac/sdk` exposes `MEDGEMMA_4B_IT_Q4_1`, `MEDGEMMA_4B_IT_Q8_0`, and multiple Whisper/TTS/GTE constants.
-- MedPsy-specific constants were not exposed by the installed SDK package during this pass. If QVAC publishes MedPsy constants or GGUF aliases in the active hackathon SDK, add them to `supportedModels` in `packages/qvac-runtime/server.mjs` and run `CASE_ROOM_QVAC_MODEL=<MEDPSY_MODEL> npm run dev`.
+- Use `MEDGEMMA_4B_IT_Q4_1` for the most reliable medical run path on typical Apple Silicon development machines. Try `MEDGEMMA_4B_IT_Q8_0` only if latency and memory headroom are acceptable.
+- MedPsy GGUF models can be tested by downloading the GGUF locally and launching with `CASE_ROOM_QVAC_MODEL_PATH=/absolute/path/to/MedPsy-model.gguf npm run dev`. This keeps the bridge local-only and auditable without relying on a remote inference API.
+- Recommended MedPsy file for larger local development machines: `medpsy-4b-q4_k_m-imat.gguf`. It is the best first balance of quality and memory. If it is too slow, try `medpsy-4b-iq4_xs-imat.gguf` or the 1.7B variant; if quality is too weak and latency is acceptable, try `medpsy-4b-q5_k_m-imat.gguf`.
+- `CASE_ROOM_STRICT_QVAC=1` and `VITE_CASE_ROOM_STRICT_QVAC=1` disable silent AI/RAG fallbacks for audited runs. If completion, RAG, ASR, TTS, or evaluator calls fail in strict mode, the app surfaces the failure instead of pretending the local model path worked.
 
-## Hackathon reproducibility and evidence
+Example MedPsy setup:
 
-Target track: General Purpose desktop edge AI. The demo assumes a macOS laptop with local QVAC model cache, Electron, Node, and microphone access.
+```bash
+mkdir -p models
+hf auth login
+hf download qvac/MedPsy-4B-GGUF medpsy-4b-q4_k_m-imat.gguf --local-dir ./models
+CASE_ROOM_STRICT_QVAC=1 VITE_CASE_ROOM_STRICT_QVAC=1 CASE_ROOM_QVAC_MODEL_PATH="$PWD/models/medpsy-4b-q4_k_m-imat.gguf" npm run dev
+```
+
+## Reproducibility And Evidence
+
+The reproducible path assumes a desktop machine with local QVAC model cache, Electron, Node, and microphone access. Exact hardware claims for external review belong in the generated artifacts and project runbook, not in the general product setup.
 
 Reproducible run:
 
 ```bash
 npm install
-npm run dev
+CASE_ROOM_QVAC_MODEL=MEDGEMMA_4B_IT_Q4_1 npm run dev
+```
+
+Strict local-inference run:
+
+```bash
+CASE_ROOM_STRICT_QVAC=1 VITE_CASE_ROOM_STRICT_QVAC=1 CASE_ROOM_QVAC_MODEL=MEDGEMMA_4B_IT_Q4_1 npm run dev
 ```
 
 Verification and artifact collection:
@@ -107,14 +128,15 @@ npm run evidence:bundle
 - QVAC health snapshot when the bridge is running
 - typecheck, lint, test, build logs
 - git status and diff-stat logs
-- a manifest listing manual artifacts still needed for submission
+- remote API transparency metadata
+- a manifest listing manual artifacts still needed for external review
 
-Manual submission artifacts still required:
+Manual evidence artifacts still required:
 
 - short demo video showing a full local encounter
 - hardware proof screenshot/video showing the local machine running the app
 - exported debrief markdown from `Save report`
-- QVAC bridge logs showing model load, ASR/TTS, and RAG readiness
+- QVAC bridge logs and `.artifacts/performance/inference-events.jsonl` showing model load, inference timing, ASR/TTS, and RAG events
 
 ## Repo structure
 
@@ -122,7 +144,6 @@ Manual submission artifacts still required:
 - `packages/simulation-core`: domain model, session engine, rubric/debrief logic
 - `packages/qvac-runtime`: mockable local AI adapter
 - `packages/case-packs/medical-osce`: seed medical scenarios and local guideline snippets
-- `.docs`: resumable product, architecture, delivery, and decision records
 
 ## Demo path
 

@@ -158,8 +158,11 @@ async function ensureModelLoaded() {
         { modelName: activeModelName, modelType: "completion" },
         () => loadModel({
           modelSrc,
-          ...(requestedModelPath ? { modelType: "llm" } : {}),
-          modelConfig: { ctx_size: 4096 },
+          ...(requestedModelPath ? { modelType: "llamacpp-completion" } : {}),
+          modelConfig: {
+            ctx_size: 4096,
+            ...(requestedModelPath ? { device: "gpu" } : {})
+          },
           onProgress: (progress) => {
             console.log(`[qvac] loading ${activeModelName}: ${progress.percentage.toFixed(1)}%`);
           }
