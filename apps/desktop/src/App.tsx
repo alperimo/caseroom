@@ -498,6 +498,7 @@ export function App() {
       return;
     }
 
+    setMessage("");
     const normalizedPrompt = promptText.trim().replace(/\s+/g, " ").toLowerCase();
     const lastSubmittedPrompt = lastSubmittedPromptRef.current;
     if (promptInFlightRef.current === normalizedPrompt) {
@@ -567,9 +568,8 @@ export function App() {
         setMessage(text);
       },
       async onFinal(text) {
-        setMessage(text);
-        await submitPrompt(text);
         setMessage("");
+        await submitPrompt(text);
       },
       onError(errorMessage) {
         setVoiceError(errorMessage);
@@ -1109,15 +1109,15 @@ export function App() {
                 <div className="avatar-body" />
                 <div className="avatar-chair" />
               </div>
-              <div className="desk-table">
+              <button
+                className="desk-table"
+                onClick={() => setActiveActionOverlay(buildActionOverlay(session, "examine"))}
+                type="button"
+                aria-label="Open patient chart"
+              >
                 <FileText size={20} />
-                <span>Chart</span>
-              </div>
-              <div className="chart-tablet">
-                <span>{selectedCase.brief.patientName}</span>
-                <strong>{selectedCase.brief.age} years</strong>
-                <p>{selectedCase.brief.chiefComplaint}</p>
-              </div>
+                <span>Patient chart</span>
+              </button>
 
               <aside className="scene-record-overlay">
                 <div className="record-person">
