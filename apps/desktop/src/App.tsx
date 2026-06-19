@@ -884,27 +884,34 @@ export function App() {
                 <div className="health-item">
                   <span className="health-label">Environment</span>
                   <span className="health-val code-val">
-                    STRICT_QVAC={typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_STRICT_QVAC === "1" ? "1" : "0"}
+                    STRICT_QVAC={runtime.strictQvacMode ? "1" : "0"}
                   </span>
                 </div>
                 <div className="health-item">
-                  <span className="health-label">Model Status</span>
+                  <span className="health-label">QVAC Runtime</span>
+                  <span className={`health-val ${runtime.qvacLocal ? "success-text" : "warning-text"}`}>
+                    <span className={`status-indicator ${runtime.qvacLocal ? "online" : "offline"}`}></span>
+                    {runtime.qvacLocal ? "Local" : "Mock Fallback"}
+                  </span>
+                </div>
+                <div className="health-item">
+                  <span className="health-label">Model</span>
                   <span className={`health-val ${runtime.modelMode.toLowerCase().includes("ready") ? "success-text" : "warning-text"}`}>
                     <span className={`status-indicator ${runtime.modelMode.toLowerCase().includes("ready") ? "online" : "offline"}`}></span>
-                    {runtime.modelMode.toLowerCase().includes("ready") ? "model ready" : runtime.modelMode.toLowerCase().includes("fallback") ? "mock fallback active" : "model standby"}
+                    {runtime.modelName ?? "detecting..."}
                   </span>
                 </div>
                 <div className="health-item">
-                  <span className="health-label">RAG Pipeline</span>
-                  <span className={`health-val ${runtime.retrievalMode.toLowerCase().includes("persistent") || runtime.retrievalMode.toLowerCase().includes("embeddings") ? "success-text" : "warning-text"}`}>
-                    <span className={`status-indicator ${runtime.retrievalMode.toLowerCase().includes("persistent") || runtime.retrievalMode.toLowerCase().includes("embeddings") ? "online" : "offline"}`}></span>
-                    {runtime.retrievalMode.toLowerCase().includes("persistent") || runtime.retrievalMode.toLowerCase().includes("embeddings") ? "RAG ready" : "citations fallback"}
+                  <span className="health-label">Case Retrieval</span>
+                  <span className={`health-val ${runtime.ragReady ? "success-text" : "warning-text"}`}>
+                    <span className={`status-indicator ${runtime.ragReady ? "online" : "offline"}`}></span>
+                    {runtime.ragReady ? "Local" : "Fallback"}
                   </span>
                 </div>
                 <div className="health-item">
-                  <span className="health-label">Network Lock</span>
-                  <span className={`health-val ${((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("localhost") || ((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("127.0.0.1") ? "info-text" : "warning-text"}`}>
-                    {((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("localhost") || ((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("127.0.0.1") ? "no remote runtime API" : "remote runtime active"}
+                  <span className="health-label">Remote Inference</span>
+                  <span className={`health-val ${((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("localhost") || ((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("127.0.0.1") ? "success-text" : "warning-text"}`}>
+                    {((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("localhost") || ((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("127.0.0.1") ? "Off" : "On"}
                   </span>
                 </div>
                 <div className="health-item">

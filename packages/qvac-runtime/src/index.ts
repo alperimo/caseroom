@@ -52,6 +52,10 @@ export type RuntimeStatus = {
   storageMode: string;
   completionMode: string;
   retrievalMode: string;
+  modelName?: string;
+  qvacLocal?: boolean;
+  ragReady?: boolean;
+  strictQvacMode?: boolean;
 };
 
 export type VoiceCaptureController = {
@@ -76,7 +80,11 @@ export function getRuntimeStatus(): RuntimeStatus {
     voiceMode: describeVoiceMode(voiceSupport),
     storageMode: describeStorageMode(),
     completionMode: "auto fallback enabled",
-    retrievalMode: "static citations fallback"
+    retrievalMode: "static citations fallback",
+    modelName: "detecting...",
+    qvacLocal: false,
+    ragReady: false,
+    strictQvacMode: isStrictQvacMode()
   };
 }
 
@@ -641,6 +649,7 @@ export async function probeRuntimeStatus(): Promise<RuntimeStatus> {
       ragReady?: boolean;
       ttsReady?: boolean;
       asrReady?: boolean;
+      strictQvacMode?: boolean;
     };
 
     return {
@@ -650,7 +659,11 @@ export async function probeRuntimeStatus(): Promise<RuntimeStatus> {
       voiceMode: payload.asrReady && payload.ttsReady ? "QVAC voice loop ready" : describeVoiceMode(voiceSupport),
       storageMode: describeStorageMode(),
       completionMode: payload.modelLoaded ? "local QVAC completion" : "QVAC on-demand load",
-      retrievalMode: payload.ragReady ? "persistent local embeddings" : payload.ragStatus ?? "static citations fallback"
+      retrievalMode: payload.ragReady ? "persistent local embeddings" : payload.ragStatus ?? "static citations fallback",
+      modelName: payload.modelName ?? "Llama 3.2 1B Q4",
+      qvacLocal: true,
+      ragReady: payload.ragReady,
+      strictQvacMode: payload.strictQvacMode ?? isStrictQvacMode()
     };
   } catch {
     return {
@@ -658,7 +671,11 @@ export async function probeRuntimeStatus(): Promise<RuntimeStatus> {
       voiceMode: describeVoiceMode(voiceSupport),
       storageMode: describeStorageMode(),
       completionMode: "deterministic fallback",
-      retrievalMode: "static citations fallback"
+      retrievalMode: "static citations fallback",
+      modelName: "Mock clinical LLM",
+      qvacLocal: false,
+      ragReady: false,
+      strictQvacMode: false
     };
   }
 }
