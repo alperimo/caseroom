@@ -10,6 +10,8 @@ import {
   QWEN3_600M_INST_Q4,
   TTS_EN_SUPERTONIC_Q8_0,
   VAD_SILERO_5_1_2,
+  WHISPER_EN_BASE_Q8_0,
+  WHISPER_EN_SMALL_Q8_0,
   WHISPER_EN_TINY_Q8_0,
   completion,
   embed,
@@ -26,6 +28,7 @@ import { bundledRagDocuments, ragWorkspaceVersion } from "./rag-documents.mjs";
 const port = Number(process.env.CASE_ROOM_QVAC_PORT ?? 4545);
 const requestedModel = process.env.CASE_ROOM_QVAC_MODEL ?? "LLAMA_3_2_1B_INST_Q4_0";
 const requestedModelPath = process.env.CASE_ROOM_QVAC_MODEL_PATH;
+const requestedAsrModel = process.env.CASE_ROOM_QVAC_ASR_MODEL ?? "WHISPER_EN_BASE_Q8_0";
 const strictQvacMode = process.env.CASE_ROOM_STRICT_QVAC === "1";
 const ragWorkspace = "caseroom-medical-osce";
 const ragManifestDir = path.resolve(process.cwd(), ".caseroom", "rag");
@@ -41,6 +44,14 @@ const supportedModels = {
   QWEN3_1_7B_INST_Q4
 };
 
+const supportedAsrModels = {
+  WHISPER_EN_TINY_Q8_0,
+  WHISPER_EN_BASE_Q8_0,
+  WHISPER_EN_SMALL_Q8_0
+};
+
+let activeAsrModelName = supportedAsrModels[requestedAsrModel] ? requestedAsrModel : "WHISPER_EN_BASE_Q8_0";
+
 let modelId = null;
 let embeddingModelId = null;
 let ttsModelId = null;
@@ -49,6 +60,8 @@ let modelLoadPromise = null;
 let embeddingLoadPromise = null;
 let ttsLoadPromise = null;
 let asrLoadPromise = null;
+let ragSearchQueue = Promise.resolve();
+let asrQueue = Promise.resolve();
 let activeModelName = requestedModelPath ? `local:${path.basename(requestedModelPath)}` : requestedModel;
 let lastLoadError = null;
 let ragStatus = "initializing";
@@ -109,6 +122,17 @@ async function measured(operation, details, fn) {
   }
 }
 
+async function enqueue(queueName, fn) {
+  const previousQueue = queueName === "asr" ? asrQueue : ragSearchQueue;
+  const run = previousQueue.catch(() => {}).then(fn);
+  if (queueName === "asr") {
+    asrQueue = run.catch(() => {});
+  } else {
+    ragSearchQueue = run.catch(() => {});
+  }
+  return run;
+}
+
 function createWavHeader(dataLength, sampleRate) {
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);
@@ -134,6 +158,26 @@ function int16ArrayToBuffer(samples) {
     buffer.writeInt16LE(value, index * 2);
   }
   return buffer;
+}
+
+function normalizeTranscriptionResult(result) {
+  if (typeof result === "string") {
+    return result;
+  }
+  if (result && typeof result === "object") {
+    if (typeof result.text === "string") {
+      return result.text;
+    }
+    if (typeof result.transcript === "string") {
+      return result.transcript;
+    }
+    if (Array.isArray(result.segments)) {
+      return result.segments
+        .map((segment) => typeof segment?.text === "string" ? segment.text : "")
+        .join(" ");
+    }
+  }
+  return "";
 }
 
 async function ensureModelLoaded() {
@@ -287,9 +331,9 @@ async function ensureAsrModelLoaded() {
     try {
       asrModelId = await measured(
         "model.load",
-        { modelName: "WHISPER_EN_TINY_Q8_0", modelType: "asr", vadModelName: "VAD_SILERO_5_1_2" },
+        { modelName: activeAsrModelName, modelType: "asr", vadModelName: "VAD_SILERO_5_1_2" },
         () => loadModel({
-          modelSrc: WHISPER_EN_TINY_Q8_0,
+          modelSrc: supportedAsrModels[activeAsrModelName],
           modelConfig: {
             vadModelSrc: VAD_SILERO_5_1_2,
             language: "en",
@@ -306,7 +350,7 @@ async function ensureAsrModelLoaded() {
             }
           },
           onProgress: (progress) => {
-            console.log(`[qvac] loading Whisper ASR: ${progress.percentage.toFixed(1)}%`);
+            console.log(`[qvac] loading ${activeAsrModelName}: ${progress.percentage.toFixed(1)}%`);
           }
         }),
       );
@@ -548,6 +592,18 @@ function extractJsonObject(text) {
   }
 }
 
+function normalizeStringArray(value, fallback, maxItems) {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+  const normalized = value
+    .filter((item) => typeof item === "string")
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, maxItems);
+  return normalized.length > 0 ? normalized : fallback;
+}
+
 async function evaluateDebriefWithQvac(session, report, citations) {
   const readyModelId = await ensureModelLoaded();
   const prompt = buildEvaluatorPrompt(session, report, citations);
@@ -570,8 +626,24 @@ async function evaluateDebriefWithQvac(session, report, citations) {
   });
   const final = await run.final;
   const raw = String(final.contentText ?? "");
-  const parsed = extractJsonObject(raw);
   const durationMs = Math.round(performance.now() - startedAt);
+  let parsed = null;
+  let parsedJson = true;
+  try {
+    parsed = extractJsonObject(raw);
+  } catch (error) {
+    parsedJson = false;
+    await logInferenceEvent({
+      operation: "completion.evaluator_debrief_parse",
+      ok: false,
+      modelName: activeModelName,
+      modelId: readyModelId,
+      caseId: session.scenario.id,
+      durationMs,
+      error: error instanceof Error ? error.message : String(error),
+      rawPreview: raw.slice(0, 500)
+    });
+  }
   await logInferenceEvent({
     operation: "completion.evaluator_debrief",
     ok: true,
@@ -583,17 +655,16 @@ async function evaluateDebriefWithQvac(session, report, citations) {
     outputTokensApprox: approximateTokens(raw),
     durationMs,
     ttftMs: null,
-    tokensPerSecondApprox: Number((approximateTokens(raw) / Math.max(0.001, durationMs / 1000)).toFixed(2))
+    tokensPerSecondApprox: Number((approximateTokens(raw) / Math.max(0.001, durationMs / 1000)).toFixed(2)),
+    parsedJson,
+    rawPreview: raw.slice(0, 500)
   });
 
   return {
-    summary: typeof parsed.summary === "string" ? parsed.summary : report.summary,
-    strengths: Array.isArray(parsed.strengths) && parsed.strengths.length > 0
-      ? parsed.strengths.filter((item) => typeof item === "string").slice(0, 3)
-      : report.strengths,
-    gaps: Array.isArray(parsed.gaps) && parsed.gaps.length > 0
-      ? parsed.gaps.filter((item) => typeof item === "string").slice(0, 4)
-      : report.gaps
+    summary: typeof parsed?.summary === "string" && parsed.summary.trim() ? parsed.summary.trim() : report.summary,
+    strengths: normalizeStringArray(parsed?.strengths, report.strengths, 3),
+    gaps: normalizeStringArray(parsed?.gaps, report.gaps, 4),
+    source: parsedJson ? "qvac-json" : "qvac-completion-deterministic-parse-fallback"
   };
 }
 
@@ -667,22 +738,24 @@ async function searchRelevantDocuments(session) {
 
   const readyEmbeddingModelId = await ensureEmbeddingModelLoaded();
   const query = buildRetrievalQuery(session);
-  const results = await measured(
-    "rag.search",
-    {
-      modelName: "GTE_LARGE_FP16",
-      modelId: readyEmbeddingModelId,
-      workspace: ragWorkspace,
-      caseId: session.scenario.id,
-      inputTokensApprox: approximateTokens(query),
-      topK: 3
-    },
-    () => ragSearch({
-      workspace: ragWorkspace,
-      modelId: readyEmbeddingModelId,
-      query,
-      topK: 3
-    }),
+  const results = await enqueue("rag", () =>
+    measured(
+      "rag.search",
+      {
+        modelName: "GTE_LARGE_FP16",
+        modelId: readyEmbeddingModelId,
+        workspace: ragWorkspace,
+        caseId: session.scenario.id,
+        inputTokensApprox: approximateTokens(query),
+        topK: 3
+      },
+      () => ragSearch({
+        workspace: ragWorkspace,
+        modelId: readyEmbeddingModelId,
+        query,
+        topK: 3
+      }),
+    ),
   );
 
   return results.map((result) => {
@@ -746,9 +819,10 @@ const server = http.createServer(async (request, response) => {
       ragStatus,
       ragReady,
       lastRagError,
-      ragWorkspace,
-      ttsReady,
-      lastTtsError,
+        ragWorkspace,
+        ttsReady,
+        lastTtsError,
+      asrModelName: activeAsrModelName,
       asrReady,
       lastAsrError
     });
@@ -801,21 +875,34 @@ const server = http.createServer(async (request, response) => {
         : "";
       const readyAsrModelId = await ensureAsrModelLoaded();
       const audioChunk = Buffer.from(audioBase64, "base64");
-      const text = await measured(
-        "asr.transcribe",
-        {
-          modelName: "WHISPER_EN_TINY_Q8_0",
-          modelId: readyAsrModelId,
-          audioBytes: audioChunk.byteLength,
-          contextPhraseCount: contextPhrases.length
-        },
-        () => transcribe({
-          modelId: readyAsrModelId,
-          audioChunk,
-          prompt: `${asrPromptBase}${lexicalHint}`
-        }),
+      const audioDurationMs = Math.round((audioChunk.byteLength / 2 / 16000) * 1000);
+      const rawTranscription = await enqueue("asr", () =>
+        measured(
+          "asr.transcribe",
+          {
+            modelName: activeAsrModelName,
+            modelId: readyAsrModelId,
+            audioBytes: audioChunk.byteLength,
+            audioDurationMs,
+            contextPhraseCount: contextPhrases.length
+          },
+          () => transcribe({
+            modelId: readyAsrModelId,
+            audioChunk,
+            prompt: `${asrPromptBase}${lexicalHint}`
+          }),
+        ),
       );
-      const transcript = String(text ?? "").replace(/\s+/g, " ").trim();
+      const transcript = normalizeTranscriptionResult(rawTranscription).replace(/\s+/g, " ").trim();
+      await logInferenceEvent({
+        operation: "asr.transcript",
+        ok: Boolean(transcript),
+        modelName: activeAsrModelName,
+        modelId: readyAsrModelId,
+        audioBytes: audioChunk.byteLength,
+        audioDurationMs,
+        transcriptPreview: transcript.slice(0, 220)
+      });
       sendJson(response, 200, {
         ok: true,
         mode: "qvac-asr",

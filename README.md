@@ -68,6 +68,7 @@ Optional environment variables:
 CASE_ROOM_QVAC_PORT=4545
 CASE_ROOM_QVAC_MODEL=LLAMA_3_2_1B_INST_Q4_0
 CASE_ROOM_QVAC_MODEL_PATH=/absolute/path/to/local-model.gguf
+CASE_ROOM_QVAC_ASR_MODEL=WHISPER_EN_BASE_Q8_0
 CASE_ROOM_STRICT_QVAC=1
 VITE_CASE_ROOM_QVAC_URL=http://127.0.0.1:4545
 VITE_CASE_ROOM_STRICT_QVAC=1
@@ -87,6 +88,7 @@ Model selection notes:
 - Use `MEDGEMMA_4B_IT_Q4_1` for the most reliable medical run path on typical Apple Silicon development machines. Try `MEDGEMMA_4B_IT_Q8_0` only if latency and memory headroom are acceptable.
 - MedPsy GGUF models can be tested by downloading the GGUF locally and launching with `CASE_ROOM_QVAC_MODEL_PATH=/absolute/path/to/MedPsy-model.gguf npm run dev`. This keeps the bridge local-only and auditable without relying on a remote inference API.
 - Recommended MedPsy file for larger local development machines: `medpsy-4b-q4_k_m-imat.gguf`. It is the best first balance of quality and memory. If it is too slow, try `medpsy-4b-iq4_xs-imat.gguf` or the 1.7B variant; if quality is too weak and latency is acceptable, try `medpsy-4b-q5_k_m-imat.gguf`.
+- ASR defaults to `WHISPER_EN_BASE_Q8_0` for better medical speech recognition. Use `CASE_ROOM_QVAC_ASR_MODEL=WHISPER_EN_TINY_Q8_0` only if startup time matters more than transcription quality.
 - `CASE_ROOM_STRICT_QVAC=1` and `VITE_CASE_ROOM_STRICT_QVAC=1` disable silent AI/RAG fallbacks for audited runs. If completion, RAG, ASR, TTS, or evaluator calls fail in strict mode, the app surfaces the failure instead of pretending the local model path worked.
 
 Example MedPsy setup:
