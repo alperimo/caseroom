@@ -387,6 +387,9 @@ function normalizeMedicalTranscript(text: string, contextPhrases: string[] = [])
 
   return text.replace(/\b[\p{L}\p{N}]{4,}\b/gu, (token) => {
     const lowerToken = token.toLowerCase();
+    if (terms.includes(lowerToken)) {
+      return token;
+    }
     const correction = terms.find((term) => shouldCorrectToken(lowerToken, term));
     return correction ?? token;
   });
