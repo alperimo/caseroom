@@ -102,6 +102,33 @@ function isStrictQvacMode(): boolean {
   return typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_STRICT_QVAC === "1";
 }
 
+function isStrictEvaluatorRequired(): boolean {
+  return typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_REQUIRE_EVALUATOR === "1";
+}
+
+function isEvaluatorEnabled(): boolean {
+  return typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_ENABLE_EVALUATOR === "1";
+}
+
+function getEvaluatorTimeoutMs(): number {
+  const raw = typeof import.meta !== "undefined" ? import.meta.env?.VITE_CASE_ROOM_EVALUATOR_TIMEOUT_MS : undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 3500;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
   if (typeof window === "undefined") {
     return null;
@@ -545,17 +572,25 @@ export async function finishEncounter(session: EncounterSession): Promise<Debrie
     return report;
   }
 
+  if (!isEvaluatorEnabled() && !isStrictEvaluatorRequired()) {
+    return report;
+  }
+
   try {
-    const response = await fetch(`${resolveRuntimeUrl()}/evaluate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
+    const response = await fetchWithTimeout(
+      `${resolveRuntimeUrl()}/evaluate`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ session, report, citations: report.citations })
       },
-      body: JSON.stringify({ session, report, citations: report.citations })
-    });
+      getEvaluatorTimeoutMs(),
+    );
 
     if (!response.ok) {
-      if (isStrictQvacMode()) {
+      if (isStrictQvacMode() && isStrictEvaluatorRequired()) {
         throw new Error(`Strict QVAC mode requires evaluator completion; status ${response.status}.`);
       }
       return report;
@@ -570,7 +605,7 @@ export async function finishEncounter(session: EncounterSession): Promise<Debrie
     };
 
     if (!payload.evaluator) {
-      if (isStrictQvacMode()) {
+      if (isStrictQvacMode() && isStrictEvaluatorRequired()) {
         throw new Error("Strict QVAC mode requires evaluator output.");
       }
       return report;
@@ -583,7 +618,7 @@ export async function finishEncounter(session: EncounterSession): Promise<Debrie
       gaps: payload.evaluator.gaps?.length ? payload.evaluator.gaps : report.gaps
     };
   } catch (error) {
-    if (isStrictQvacMode()) {
+    if (isStrictQvacMode() && isStrictEvaluatorRequired()) {
       throw error;
     }
     return report;

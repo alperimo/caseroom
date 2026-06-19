@@ -261,10 +261,14 @@ export function App() {
   const [activeActionOverlay, setActiveActionOverlay] = useState<ActionOverlay | null>(null);
   const [exportState, setExportState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [isPrompting, setIsPrompting] = useState(false);
+  const [isEndingEncounter, setIsEndingEncounter] = useState(false);
   const voiceControllerRef = useRef<VoiceCaptureController | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const promptInputRef = useRef<HTMLTextAreaElement | null>(null);
   const historyRef = useRef<DebriefRun[]>([]);
+  const promptInFlightRef = useRef<string | null>(null);
+  const lastSubmittedPromptRef = useRef<{ normalized: string; submittedAt: number } | null>(null);
   const lastDraftSignatureRef = useRef<string | null>(null);
   const initialSpokenSessionIdRef = useRef<string | null>(null);
   const warmupAttemptedRef = useRef(false);
@@ -494,12 +498,33 @@ export function App() {
       return;
     }
 
+    const normalizedPrompt = promptText.trim().replace(/\s+/g, " ").toLowerCase();
+    const lastSubmittedPrompt = lastSubmittedPromptRef.current;
+    if (promptInFlightRef.current === normalizedPrompt) {
+      return;
+    }
+    if (
+      lastSubmittedPrompt?.normalized === normalizedPrompt &&
+      Date.now() - lastSubmittedPrompt.submittedAt < 20_000
+    ) {
+      return;
+    }
+
+    promptInFlightRef.current = normalizedPrompt;
+    lastSubmittedPromptRef.current = {
+      normalized: normalizedPrompt,
+      submittedAt: Date.now()
+    };
+    setIsPrompting(true);
     let response: Awaited<ReturnType<typeof generatePatientTurn>>;
     try {
       response = await generatePatientTurn(session, promptText.trim());
     } catch (error) {
       setVoiceError(error instanceof Error ? error.message : String(error));
       return;
+    } finally {
+      promptInFlightRef.current = null;
+      setIsPrompting(false);
     }
     setSession(response.session);
     const latestTurn = response.session.transcript[response.session.transcript.length - 1];
@@ -525,6 +550,10 @@ export function App() {
   }
 
   function toggleVoiceCapture() {
+    if (isPrompting || isEndingEncounter) {
+      return;
+    }
+
     if (voiceState === "listening") {
       voiceControllerRef.current?.stop();
       return;
@@ -556,7 +585,7 @@ export function App() {
   }
 
   async function runAction(kind: ActionKind) {
-    if (!session) {
+    if (!session || isPrompting || isEndingEncounter) {
       return;
     }
     if (kind === "history") {
@@ -569,15 +598,21 @@ export function App() {
   }
 
   async function endEncounter() {
-    if (!session) {
+    if (!session || isEndingEncounter) {
       return;
     }
 
+    setIsEndingEncounter(true);
+    setVoiceError(null);
+    voiceControllerRef.current?.cancel();
+    voiceControllerRef.current = null;
+    cancelSpeech();
     let report: Awaited<ReturnType<typeof finishEncounter>>;
     try {
       report = await finishEncounter(session);
     } catch (error) {
       setVoiceError(error instanceof Error ? error.message : String(error));
+      setIsEndingEncounter(false);
       return;
     }
     const entry: DebriefRun = {
@@ -597,6 +632,7 @@ export function App() {
     setExportMessage(null);
     setActiveActionOverlay(null);
     setScreen("debrief");
+    setIsEndingEncounter(false);
   }
 
   function openSavedDebrief(run: DebriefRun) {
@@ -1150,6 +1186,7 @@ export function App() {
                   <div className="composer-actions">
                     <button
                       className={voiceState === "listening" ? "secondary-button" : "ghost-button"}
+                      disabled={isPrompting || isEndingEncounter || voiceState === "processing"}
                       onClick={toggleVoiceCapture}
                       type="button"
                     >
@@ -1157,12 +1194,17 @@ export function App() {
                       {voiceState === "listening"
                         ? "Stop"
                         : voiceState === "processing"
-                          ? "Listening"
+                          ? "Processing"
                           : "Voice"}
                     </button>
-                    <button className="primary-button" onClick={sendPrompt} type="button">
+                    <button
+                      className="primary-button"
+                      disabled={isPrompting || isEndingEncounter || !message.trim()}
+                      onClick={sendPrompt}
+                      type="button"
+                    >
                       <Send size={18} />
-                      Send
+                      {isPrompting ? "Sending" : "Send"}
                     </button>
                   </div>
                   {voiceError ? <p className="voice-error">{voiceError}</p> : null}
@@ -1185,6 +1227,7 @@ export function App() {
                     <button
                       key={kind}
                       className={`tool-button tool-button-${status.state}`}
+                      disabled={isPrompting || isEndingEncounter}
                       onClick={() => runAction(kind)}
                       type="button"
                     >
@@ -1194,8 +1237,8 @@ export function App() {
                     </button>
                   );
                 })}
-                <button className="end-button" onClick={endEncounter} type="button">
-                  End
+                <button className="end-button" disabled={isEndingEncounter} onClick={endEncounter} type="button">
+                  {isEndingEncounter ? "Closing" : "End"}
                 </button>
               </div>
 
