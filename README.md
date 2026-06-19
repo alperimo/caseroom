@@ -93,10 +93,21 @@ Example MedPsy setup:
 
 ```bash
 mkdir -p models
+python3 -m pip install -U "huggingface_hub[cli]"
 hf auth login
 hf download qvac/MedPsy-4B-GGUF medpsy-4b-q4_k_m-imat.gguf --local-dir ./models
 CASE_ROOM_STRICT_QVAC=1 VITE_CASE_ROOM_STRICT_QVAC=1 CASE_ROOM_QVAC_MODEL_PATH="$PWD/models/medpsy-4b-q4_k_m-imat.gguf" npm run dev
 ```
+
+Do not install an npm package named `hf`; the `hf` command comes from Hugging Face's Python CLI.
+
+Verify the active bridge model:
+
+```bash
+curl -s http://127.0.0.1:4545/health | python3 -m json.tool
+```
+
+For a local MedPsy run, `modelName` should include `local:medpsy-4b-q4_k_m-imat.gguf`.
 
 ## Reproducibility And Evidence
 
