@@ -4,6 +4,8 @@ import path from "node:path";
 import {
   GTE_LARGE_FP16,
   LLAMA_3_2_1B_INST_Q4_0,
+  MEDGEMMA_4B_IT_Q4_1,
+  MEDGEMMA_4B_IT_Q8_0,
   QWEN3_1_7B_INST_Q4,
   QWEN3_600M_INST_Q4,
   TTS_EN_SUPERTONIC_Q8_0,
@@ -29,6 +31,8 @@ const ragManifestPath = path.join(ragManifestDir, `${ragWorkspace}.json`);
 
 const supportedModels = {
   LLAMA_3_2_1B_INST_Q4_0,
+  MEDGEMMA_4B_IT_Q4_1,
+  MEDGEMMA_4B_IT_Q8_0,
   QWEN3_600M_INST_Q4,
   QWEN3_1_7B_INST_Q4
 };

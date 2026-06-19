@@ -36,6 +36,8 @@ npm run build
 npm run lint
 npm run typecheck
 npm run test
+npm run verify
+npm run evidence:bundle
 ```
 
 ## Environment notes
@@ -71,8 +73,48 @@ VITE_CASE_ROOM_QVAC_URL=http://127.0.0.1:4545
 Supported built-in model constants currently wired in the bridge:
 
 - `LLAMA_3_2_1B_INST_Q4_0`
+- `MEDGEMMA_4B_IT_Q4_1`
+- `MEDGEMMA_4B_IT_Q8_0`
 - `QWEN3_600M_INST_Q4`
 - `QWEN3_1_7B_INST_Q4`
+
+QVAC SDK medical model note:
+
+- The installed `@qvac/sdk` exposes `MEDGEMMA_4B_IT_Q4_1`, `MEDGEMMA_4B_IT_Q8_0`, and multiple Whisper/TTS/GTE constants.
+- MedPsy-specific constants were not exposed by the installed SDK package during this pass. If QVAC publishes MedPsy constants or GGUF aliases in the active hackathon SDK, add them to `supportedModels` in `packages/qvac-runtime/server.mjs` and run `CASE_ROOM_QVAC_MODEL=<MEDPSY_MODEL> npm run dev`.
+
+## Hackathon reproducibility and evidence
+
+Target track: General Purpose desktop edge AI. The demo assumes a macOS laptop with local QVAC model cache, Electron, Node, and microphone access.
+
+Reproducible run:
+
+```bash
+npm install
+npm run dev
+```
+
+Verification and artifact collection:
+
+```bash
+npm run verify
+npm run evidence:bundle
+```
+
+`npm run evidence:bundle` writes `.artifacts/submission/` with:
+
+- hardware proof JSON
+- QVAC health snapshot when the bridge is running
+- typecheck, lint, test, build logs
+- git status and diff-stat logs
+- a manifest listing manual artifacts still needed for submission
+
+Manual submission artifacts still required:
+
+- short demo video showing a full local encounter
+- hardware proof screenshot/video showing the local machine running the app
+- exported debrief markdown from `Save report`
+- QVAC bridge logs showing model load, ASR/TTS, and RAG readiness
 
 ## Repo structure
 
