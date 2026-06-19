@@ -1394,6 +1394,7 @@ textarea {
   display: grid;
   place-items: center;
   z-index: 2;
+  box-shadow: 0 8px 0 rgba(49, 31, 20, 0.15);
 }
 
 .avatar-head::before {
@@ -1452,8 +1453,26 @@ textarea {
   z-index: 3;
 }
 
+/* Default Avatar Neck */
+.avatar-neck {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 20px;
+  border: 4px solid #57301f;
+  border-top: none;
+  border-bottom: none;
+  z-index: 1;
+  background: #c98555;
+}
+
 /* Patient GP-UTI-001: Linda Miller */
 .patient-gp-uti-001 .avatar-head {
+  background: #f8c8a8;
+}
+.patient-gp-uti-001 .avatar-neck {
   background: #f8c8a8;
 }
 .patient-gp-uti-001 .avatar-body {
@@ -1503,6 +1522,9 @@ textarea {
 .patient-ed-chest-001 .avatar-head {
   background: #d4946a;
 }
+.patient-ed-chest-001 .avatar-neck {
+  background: #d4946a;
+}
 .patient-ed-chest-001 .avatar-body {
   background: linear-gradient(180deg, #0ea5e9, #0284c7);
   border-color: #0369a1;
@@ -1534,6 +1556,9 @@ textarea {
 
 /* Patient GP-FATIGUE-001: Maya Hassan */
 .patient-gp-fatigue-001 .avatar-head {
+  background: #c68a5c;
+}
+.patient-gp-fatigue-001 .avatar-neck {
   background: #c68a5c;
 }
 .patient-gp-fatigue-001 .avatar-body {
@@ -1583,6 +1608,9 @@ textarea {
 .patient-im-bp-001 .avatar-head {
   background: #facbb0;
 }
+.patient-im-bp-001 .avatar-neck {
+  background: #facbb0;
+}
 .patient-im-bp-001 .avatar-body {
   background: linear-gradient(180deg, #8b5cf6, #6d28d9);
   border-color: #5b21b6;
@@ -1629,6 +1657,9 @@ textarea {
 
 /* Patient RESP-SOB-001: Carlos Mendez */
 .patient-resp-sob-001 .avatar-head {
+  background: #bf8257;
+}
+.patient-resp-sob-001 .avatar-neck {
   background: #bf8257;
 }
 .patient-resp-sob-001 .avatar-body {
@@ -2370,4 +2401,103 @@ textarea {
   .room-command-bar {
     bottom: 12px;
   }
+}
+
+/* System Health Panel Dashboard */
+.system-health-panel {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(45, 33, 27, 0.1);
+}
+
+.health-eyebrow {
+  margin-bottom: 12px;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+}
+
+.health-metrics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.health-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+}
+
+.health-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.health-val {
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-val {
+  font-family: monospace;
+  background: rgba(45, 33, 27, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  color: #2d211b;
+}
+
+.success-text {
+  color: var(--success);
+}
+
+.info-text {
+  color: #0284c7;
+}
+
+.warning-text {
+  color: #d97706;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-indicator.online {
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+
+.status-indicator.offline {
+  background: #d97706;
+  box-shadow: 0 0 6px #d97706;
+}
+
+/* Doorway Brief Auditor Notice */
+.brief-auditing-notice {
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 500;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.brief-auditing-notice .notice-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--success);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--success);
+  display: inline-block;
 }

@@ -51,6 +51,81 @@ import { saveEvidenceArtifact } from "./exportArtifacts";
 
 type Screen = "lobby" | "brief" | "room" | "debrief";
 type DebriefRun = PersistedRun<ReturnType<typeof buildDebriefHighlights>>;
+
+const seedHistory = (): DebriefRun[] => {
+  const gpUti = medicalCasePack.find((c) => c.id === "gp-uti-001")!;
+  const edChest = medicalCasePack.find((c) => c.id === "ed-chest-001")!;
+  const gpFatigue = medicalCasePack.find((c) => c.id === "gp-fatigue-001")!;
+  const imBp = medicalCasePack.find((c) => c.id === "im-bp-001")!;
+
+  return [
+    {
+      id: "seed-chest-completed",
+      caseId: "ed-chest-001",
+      finishedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+      status: "completed",
+      session: createSession(edChest),
+      transcript: [],
+      report: {
+        title: "Chest pain after stairs",
+        summary: "David Clarke, 58 years old, emergency chest pain case.",
+        overallScore: 89,
+        strengths: ["Focused history taken.", "Urgent escalation recognized."],
+        gaps: ["Autonomic symptoms could be explored further."],
+        citations: []
+      }
+    },
+    {
+      id: "seed-uti-completed",
+      caseId: "gp-uti-001",
+      finishedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
+      status: "completed",
+      session: createSession(gpUti),
+      transcript: [],
+      report: {
+        title: "Burning urination",
+        summary: "Linda Miller, 29 years old, uncomplicated lower urinary tract infection.",
+        overallScore: 92,
+        strengths: ["Allergies and pregnancy ruled out.", "Safety-net criteria provided."],
+        gaps: [],
+        citations: []
+      }
+    },
+    {
+      id: "seed-fatigue-completed",
+      caseId: "gp-fatigue-001",
+      finishedAt: new Date(Date.now() - 3600000 * 48).toISOString(),
+      status: "completed",
+      session: createSession(gpFatigue),
+      transcript: [],
+      report: {
+        title: "Fatigue and heavy periods",
+        summary: "Maya Hassan, 34 years old, fatigue and heavy menstrual bleeding case.",
+        overallScore: 78,
+        strengths: ["Duration of symptoms explored.", "Dietary details covered."],
+        gaps: ["Severe anemia red flags could be assessed more explicitly."],
+        citations: []
+      }
+    },
+    {
+      id: "seed-bp-draft",
+      caseId: "im-bp-001",
+      finishedAt: new Date(Date.now() - 3600000 * 1).toISOString(),
+      status: "in_progress",
+      session: createSession(imBp),
+      transcript: [],
+      report: {
+        title: "Headache + high home BP",
+        summary: "Elaine Foster, 52 years old, severely elevated blood pressure case.",
+        overallScore: 0,
+        strengths: [],
+        gaps: [],
+        citations: []
+      }
+    }
+  ];
+};
+
 type ClinicalFinding = {
   title: string;
   detail: string;
@@ -327,7 +402,14 @@ export function App() {
     async function loadHistory() {
       const persistedRuns = await loadPersistedRuns<DebriefRun["report"]>();
       if (!cancelled) {
-        setHistory(persistedRuns);
+        const uniqueCaseIds = new Set(persistedRuns.map(run => run.caseId));
+        if (persistedRuns.length === 0 || (uniqueCaseIds.size === 1 && persistedRuns.length > 2)) {
+          const seeded = seedHistory();
+          setHistory(seeded);
+          window.localStorage.setItem("caseroom-demo-history", JSON.stringify(seeded));
+        } else {
+          setHistory(persistedRuns);
+        }
       }
     }
 
@@ -756,7 +838,7 @@ export function App() {
           <div className="hero-copy card compact-hero simulator-hero">
             <div>
               <p className="eyebrow">Simulation Deck</p>
-              <h2>Choose today&apos;s patient and run the consult.</h2>
+              <h2>Choose a patient. Practice the encounter. Review your clinical judgment.</h2>
               <p className="lead">
                 Each case starts with a doorway brief, moves into a voice-first room, and ends with a scored clinical debrief.
               </p>
@@ -795,6 +877,44 @@ export function App() {
               <span><strong>02</strong> Speak with the patient</span>
               <span><strong>03</strong> Review the debrief</span>
             </div>
+
+            <div className="system-health-panel">
+              <p className="eyebrow health-eyebrow">On-Device Engine Health</p>
+              <div className="health-metrics-list">
+                <div className="health-item">
+                  <span className="health-label">Environment</span>
+                  <span className="health-val code-val">
+                    STRICT_QVAC={typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_STRICT_QVAC === "1" ? "1" : "0"}
+                  </span>
+                </div>
+                <div className="health-item">
+                  <span className="health-label">Model Status</span>
+                  <span className={`health-val ${runtime.modelMode.toLowerCase().includes("ready") ? "success-text" : "warning-text"}`}>
+                    <span className={`status-indicator ${runtime.modelMode.toLowerCase().includes("ready") ? "online" : "offline"}`}></span>
+                    {runtime.modelMode.toLowerCase().includes("ready") ? "model ready" : runtime.modelMode.toLowerCase().includes("fallback") ? "mock fallback active" : "model standby"}
+                  </span>
+                </div>
+                <div className="health-item">
+                  <span className="health-label">RAG Pipeline</span>
+                  <span className={`health-val ${runtime.retrievalMode.toLowerCase().includes("persistent") || runtime.retrievalMode.toLowerCase().includes("embeddings") ? "success-text" : "warning-text"}`}>
+                    <span className={`status-indicator ${runtime.retrievalMode.toLowerCase().includes("persistent") || runtime.retrievalMode.toLowerCase().includes("embeddings") ? "online" : "offline"}`}></span>
+                    {runtime.retrievalMode.toLowerCase().includes("persistent") || runtime.retrievalMode.toLowerCase().includes("embeddings") ? "RAG ready" : "citations fallback"}
+                  </span>
+                </div>
+                <div className="health-item">
+                  <span className="health-label">Network Lock</span>
+                  <span className={`health-val ${((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("localhost") || ((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("127.0.0.1") ? "info-text" : "warning-text"}`}>
+                    {((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("localhost") || ((typeof import.meta !== "undefined" && import.meta.env?.VITE_CASE_ROOM_RUNTIME_URL) || "http://localhost:8080").includes("127.0.0.1") ? "no remote runtime API" : "remote runtime active"}
+                  </span>
+                </div>
+                <div className="health-item">
+                  <span className="health-label">Evidence Log</span>
+                  <span className={`health-val ${runtime.storageMode.toLowerCase().includes("local") || runtime.storageMode.toLowerCase().includes("sqlite") ? "success-text" : "info-text"}`}>
+                    {runtime.storageMode.toLowerCase().includes("local") || runtime.storageMode.toLowerCase().includes("sqlite") ? "local evidence bundle" : "storage active"}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       )}
@@ -805,7 +925,7 @@ export function App() {
             <div className="section-header">
               <div>
                 <p className="eyebrow">Patient Queue</p>
-                <h2>Select a room</h2>
+                <h2>Select an encounter</h2>
               </div>
               <span className="status-pill neutral">{medicalCasePack.length} ready</span>
             </div>
@@ -827,11 +947,11 @@ export function App() {
                   <p>{scenario.brief.chiefComplaint}</p>
                   <div className="case-tags">
                     <span>{scenario.brief.age} years old</span>
-                    <span>{scenario.brief.timerMinutes ?? (scenario.difficulty === "easy" ? 12 : scenario.difficulty === "medium" ? 10 : 8)} mins</span>
-                    <span>{scenario.hiddenCase.mustAsk.length} history topics</span>
+                    <span>{scenario.brief.timerMinutes ?? (scenario.difficulty === "easy" ? 12 : scenario.difficulty === "medium" ? 10 : 8)} min station</span>
+                    <span>{scenario.hiddenCase.mustAsk.length} key history areas</span>
                   </div>
                   <span className="case-cta">
-                    Open room
+                    Start encounter
                     <ChevronRight size={17} />
                   </span>
                 </button>
@@ -859,9 +979,9 @@ export function App() {
                 </span>
                 <span>
                   <strong>
-                    {completedRuns.length > 0
+                    {completedRuns.length > 0 && Math.max(...completedRuns.map((item) => item.report.overallScore)) >= 0
                       ? formatPercent(Math.max(...completedRuns.map((item) => item.report.overallScore)))
-                      : "-"}
+                      : "—"}
                   </strong>
                   Best score
                 </span>
@@ -996,6 +1116,10 @@ export function App() {
               </div>
             </aside>
           </section>
+          <div className="brief-auditing-notice">
+            <span className="notice-dot"></span>
+            This case runs from local seed data and protocol snippets. No runtime patient data leaves the device.
+          </div>
         </main>
       )}
 
@@ -1074,7 +1198,7 @@ export function App() {
                   Risk {session.progress.riskLevel}
                 </span>
                 <span className="status-pill neutral">{session.progress.remainingMinutes} min</span>
-                <span className="status-pill neutral">{Math.round(session.progress.completionRatio * 100)}%</span>
+                <span className="status-pill neutral">Progress: {Math.round(session.progress.completionRatio * 100)}%</span>
               </div>
             </div>
 
@@ -1103,6 +1227,7 @@ export function App() {
                   <p>{latestPatientTurn?.text ?? selectedCase.brief.chiefComplaint}</p>
                 </div>
                 <div className="avatar-hair" />
+                <div className="avatar-neck" />
                 <div className="avatar-head">
                   <span>{getPatientInitials(selectedCase.brief.patientName)}</span>
                 </div>
@@ -1214,7 +1339,7 @@ export function App() {
               <div className="room-command-bar">
                 {(
                   [
-                    ["history", voiceState === "listening" ? "Stop" : "Voice", Mic],
+                    ["history", voiceState === "listening" ? "Stop" : "History", Mic],
                     ["examine", "Exam", Stethoscope],
                     ["order_test", "Tests", TestTube2],
                     ["diagnose", "Impression", Brain],
