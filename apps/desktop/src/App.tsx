@@ -278,7 +278,7 @@ function getActionStatus(session: EncounterSession, kind: ActionKind): ActionSta
   if (kind === "history") {
     return session.progress.missingCriticalTopics.length === 0
       ? { state: "done", label: "covered" }
-      : { state: "needs", label: `${session.progress.missingCriticalTopics.length} left` };
+      : { state: "needs", label: `${session.progress.missingCriticalTopics.length} gaps` };
   }
   if (kind === "examine") {
     return session.examPerformed ? { state: "done", label: "done" } : { state: "ready", label: "ready" };
@@ -1320,7 +1320,7 @@ export function App() {
                         ? "Stop"
                         : voiceState === "processing"
                           ? "Processing"
-                          : "Voice"}
+                          : "Speak"}
                     </button>
                     <button
                       className="primary-button"
@@ -1339,7 +1339,7 @@ export function App() {
               <div className="room-command-bar">
                 {(
                   [
-                    ["history", voiceState === "listening" ? "Stop" : "History", Mic],
+                    ["history", voiceState === "listening" ? "Stop" : "Speak", Mic],
                     ["examine", "Exam", Stethoscope],
                     ["order_test", "Tests", TestTube2],
                     ["diagnose", "Impression", Brain],
