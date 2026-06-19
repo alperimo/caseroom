@@ -23,6 +23,7 @@ import {
   buildDebriefHighlights,
   createSession,
   formatPercent,
+  revealTopic,
   type ActionKind,
   type EncounterSession,
   type MedicalScenario
@@ -677,6 +678,15 @@ export function App() {
     const response = await generatePatientTurn(session, "", kind);
     setSession(response.session);
     setActiveActionOverlay(buildActionOverlay(response.session, kind));
+  }
+
+  function handleManuallyRevealTopic(topic: string) {
+    if (!session) {
+      return;
+    }
+    const nextSession = revealTopic(session, topic);
+    setSession(nextSession);
+    setActiveActionOverlay(buildActionOverlay(nextSession, "diagnose"));
   }
 
   async function endEncounter() {
@@ -1405,9 +1415,22 @@ export function App() {
                     </div>
                     <p>{activeActionOverlay.summary}</p>
                     <ul className="overlay-findings">
-                      {activeActionOverlay.items.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
+                      {activeActionOverlay.kind === "diagnose" && session && session.progress.missingCriticalTopics.length > 0 ? (
+                        session.progress.missingCriticalTopics.map((topic) => (
+                          <li
+                            key={topic}
+                            className="clickable-gap-item"
+                            onClick={() => handleManuallyRevealTopic(topic)}
+                          >
+                            <span>Still clarify: {topic}</span>
+                            <small className="force-done-badge">Click to mark as covered</small>
+                          </li>
+                        ))
+                      ) : (
+                        activeActionOverlay.items.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))
+                      )}
                     </ul>
                     <div className="overlay-next-step">
                       <span>Recommended next move</span>

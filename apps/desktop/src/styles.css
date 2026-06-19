@@ -2501,3 +2501,33 @@ textarea {
   box-shadow: 0 0 8px var(--success);
   display: inline-block;
 }
+
+/* Clickable History Gaps Override */
+.clickable-gap-item {
+  cursor: pointer;
+  display: flex !important;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease-in-out;
+  border: 2px solid rgba(220, 100, 50, 0.2) !important;
+  background: rgba(253, 245, 240, 0.72) !important;
+}
+
+.clickable-gap-item:hover {
+  background: rgba(253, 230, 220, 0.9) !important;
+  border-color: rgba(220, 100, 50, 0.5) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 100, 50, 0.08);
+}
+
+.force-done-badge {
+  font-size: 0.76rem;
+  color: #c05020;
+  font-weight: 500;
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.clickable-gap-item:hover .force-done-badge {
+  opacity: 1;
+}
