@@ -1089,3 +1089,24 @@ export async function speakText(text: string): Promise<void> {
     window.speechSynthesis.speak(utterance);
   });
 }
+
+export async function extractTopics(
+  turns: Array<{ speaker: string; text: string }>,
+  mustAsk: string[],
+  synonyms: Record<string, string[]>,
+): Promise<Record<string, boolean>> {
+  try {
+    const response = await fetch(`${resolveRuntimeUrl()}/extract-topics`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ turns, mustAsk, synonyms })
+    });
+    if (!response.ok) {
+      return {};
+    }
+    const payload = (await response.json()) as { mapping?: Record<string, boolean> };
+    return payload.mapping ?? {};
+  } catch {
+    return {};
+  }
+}

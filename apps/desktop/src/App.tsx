@@ -31,6 +31,7 @@ import {
 import {
   buildVoiceContextPhrases,
   cancelSpeech,
+  extractTopics,
   finishEncounter,
   generatePatientTurn,
   getRuntimeStatus,
@@ -611,6 +612,38 @@ export function App() {
       setIsPrompting(false);
     }
     setSession(response.session);
+    
+    // Asynchronous background topic extraction via local LLM
+    void (async () => {
+      try {
+        const mustAsk = response.session.progress.missingCriticalTopics;
+        if (mustAsk.length === 0) {
+          return;
+        }
+        const lastThreeTurns = response.session.transcript.slice(-3);
+        const synonyms = response.session.scenario.hiddenCase.synonyms || {};
+        console.log("[caseroom] calling background extractTopics with turns:", lastThreeTurns);
+        const mapping = await extractTopics(lastThreeTurns, mustAsk, synonyms);
+        console.log("[caseroom] background extractTopics result mapping:", mapping);
+        const topicsToReveal = Object.keys(mapping).filter((key) => mapping[key] === true && mustAsk.includes(key));
+        if (topicsToReveal.length > 0) {
+          console.log("[caseroom] revealing topics from background extract:", topicsToReveal);
+          setSession((currentSession) => {
+            if (!currentSession) {
+              return null;
+            }
+            let updated = currentSession;
+            for (const topic of topicsToReveal) {
+              updated = revealTopic(updated, topic);
+            }
+            return updated;
+          });
+        }
+      } catch (e) {
+        console.error("Background topic extraction failed:", e);
+      }
+    })();
+
     const latestTurn = response.session.transcript[response.session.transcript.length - 1];
     if (latestTurn?.speaker === "patient") {
       try {

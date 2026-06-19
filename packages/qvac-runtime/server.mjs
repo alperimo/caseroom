@@ -580,17 +580,34 @@ function buildEvaluatorPrompt(session, report, citations) {
 }
 
 function extractJsonObject(text) {
-  const trimmed = String(text ?? "").trim();
+  let cleaned = String(text ?? "").trim();
+  // Strip <think>...</think> blocks if present
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  
   try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) {
-      throw new Error("Evaluator did not return JSON.");
+    return JSON.parse(cleaned);
+  } catch (error) {
+    const lastBraceIndex = cleaned.lastIndexOf("}");
+    const firstBraceIndex = cleaned.indexOf("{");
+    if (firstBraceIndex !== -1 && lastBraceIndex !== -1 && lastBraceIndex > firstBraceIndex) {
+      const subtext = cleaned.slice(firstBraceIndex, lastBraceIndex + 1);
+      try {
+        return JSON.parse(subtext);
+      } catch {
+        // Try searching backwards from the last } for the matching { that forms valid JSON
+        let startIdx = cleaned.lastIndexOf("{", lastBraceIndex);
+        while (startIdx !== -1 && startIdx >= firstBraceIndex) {
+          try {
+            return JSON.parse(cleaned.slice(startIdx, lastBraceIndex + 1));
+          } catch {}
+          startIdx = cleaned.lastIndexOf("{", startIdx - 1);
+        }
+      }
     }
-    return JSON.parse(match[0]);
+    throw error;
   }
 }
+
 
 function normalizeStringArray(value, fallback, maxItems) {
   if (!Array.isArray(value)) {
@@ -602,6 +619,197 @@ function normalizeStringArray(value, fallback, maxItems) {
     .filter(Boolean)
     .slice(0, maxItems);
   return normalized.length > 0 ? normalized : fallback;
+}
+
+function buildExtractTopicsPrompt(turns, mustAsk, synonyms) {
+  const topicsDescription = mustAsk.map((topic) => {
+    const list = synonyms[topic] || [];
+    return `- Topic: "${topic}" (addressed if the conversation mentions: ${topic}${list.length ? ", " + list.join(", ") : ""})`;
+  }).join("\n");
+
+  return [
+    "You are a medical simulation assessor checking a clinician-patient dialogue.",
+    "Evaluate if the clinician successfully asked about or explored any of the specified topics in the dialogue turns below.",
+    "",
+    "Topic Definitions for this case:",
+    topicsDescription,
+    "",
+    "Semantic Relevance Principles:",
+    "1. Intent & Context Match: A topic is only addressed (TRUE) if there is a clear intent in the clinician's question or the patient's response to explore that specific area of clinical history or physical symptom.",
+    "2. Active Symptoms vs. Historical Inquiries:",
+    "   - Topics representing 'history' (e.g. cardiac history, family history, medical history) require discussing past events, chronic conditions, prior diagnoses, or family members' conditions. Mentioning or describing current acute symptoms (like chest pain, high heart rate, active sweating) does NOT satisfy a history topic.",
+    "3. Triggers/Context vs. Symptom Presence:",
+    "   - Mentioning a physical activity or trigger (e.g. climbing stairs, walking) does NOT satisfy a symptom topic (e.g. shortness of breath, dyspnea) unless there is explicit discussion or mention of the breathing difficulty itself.",
+    "4. No Logical Over-association:",
+    "   - Do not mark a topic as true just because it is logically or clinically related to what the patient is experiencing. For example, a patient presenting with chest pain is likely having a cardiac issue, but unless the clinician asks about their cardiac history (past heart attacks, cholesterol, family history) or the patient volunteers it, 'cardiac history' remains false.",
+    "",
+    "Instructions:",
+    "- Analyze the dialogue turns carefully.",
+    "- Analyze each topic step-by-step according to the Semantic Relevance Principles above before determining if it is true or false.",
+    "- Output a brief reasoning sentence for each topic, then output a JSON block mapping each topic name to a boolean (true if addressed, false otherwise).",
+    "- Output ONLY the JSON block at the very end of your response.",
+    "",
+    "Few-shot Examples:",
+    "---",
+    "Dialogue:",
+    "clinician: Are you feeling sweaty?",
+    "patient: Yes, a bit.",
+    "Topic definitions:",
+    "- Topic: \"sweating\" (addressed if the conversation mentions: sweating, sweat, sweats, clammy, wetness)",
+    "- Topic: \"radiation\" (addressed if the conversation mentions: radiation, spread, arm, neck, jaw)",
+    "Output:",
+    "Analysis:",
+    "- sweating: Clinician asked about feeling sweaty, patient confirmed. True.",
+    "- radiation: Neither the clinician asked nor the patient mentioned radiation or synonyms. False.",
+    "",
+    "{\"sweating\": true, \"radiation\": false}",
+    "---",
+    "Dialogue:",
+    "clinician: Do you have family history of heart attack?",
+    "patient: My father did.",
+    "Topic definitions:",
+    "- Topic: \"cardiac history\" (addressed if the conversation mentions: cardiac history, heart, coronary, father, mother, dad)",
+    "- Topic: \"sweating\" (addressed if the conversation mentions: sweating, sweat, clammy)",
+    "Output:",
+    "Analysis:",
+    "- cardiac history: Clinician explicitly asked about family history of heart attack, patient confirmed. True.",
+    "- sweating: Neither clinician asked nor patient mentioned sweating or synonyms. False.",
+    "",
+    "{\"cardiac history\": true, \"sweating\": false}",
+    "---",
+    "Dialogue:",
+    "patient: Hello doctor. I got a heavy pain in my chest after climbing the stairs and it scared me.",
+    "clinician: Are you feeling sweaty?",
+    "patient: I felt clammy when I was climbing the stairs.",
+    "Topic definitions:",
+    "- Topic: \"cardiac history\" (addressed if the conversation mentions: cardiac history, heart, coronary, father, mother, dad)",
+    "- Topic: \"radiation\" (addressed if the conversation mentions: radiation, spread, arm, neck, jaw)",
+    "- Topic: \"sweating\" (addressed if the conversation mentions: sweating, sweat, clammy)",
+    "Output:",
+    "Analysis:",
+    "- cardiac history: Patient described current chest pain symptom, but did not discuss past history or family history of heart issues. False.",
+    "- radiation: Neither clinician asked nor patient mentioned radiation or synonyms. False.",
+    "- sweating: Clinician asked about feeling sweaty, and patient mentioned feeling clammy. True.",
+    "",
+    "{\"cardiac history\": false, \"radiation\": false, \"sweating\": true}",
+    "---",
+    "",
+    "Active Dialogue to evaluate:",
+    turns.map((turn) => `${turn.speaker}: ${turn.text}`).join("\n"),
+    "",
+    "Topic definitions for this evaluation:",
+    topicsDescription,
+    "",
+    "Output (Perform analysis first, then return the JSON block):"
+  ].join("\n");
+}
+
+function extractTopicsDeterministic(turns, mustAsk, synonyms) {
+  const dialogueText = turns.map(t => t.text).join(" ").toLowerCase();
+  const mapping = {};
+  
+  const contextualKeywords = new Set([
+    "father", "mother", "dad", "mom", "parents", "parent", "brother", "sister", "grandpa", "grandma", "family", "family history",
+    "arm", "left arm", "neck", "jaw", "back", "shoulder", "chest",
+    "stairs", "climbing", "climb", "walk", "walking", "run", "running", "exercise", "exertion"
+  ]);
+
+  for (const topic of mustAsk) {
+    const list = synonyms[topic] || [];
+    const keywords = [topic, ...list];
+    
+    // For specific chest-pain topics, apply contextual safeguards
+    if (topic === "shortness of breath") {
+      const primary = keywords.filter(k => !contextualKeywords.has(k.toLowerCase()));
+      const hasPrimary = primary.some(kw => {
+        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
+      });
+      mapping[topic] = hasPrimary;
+    } else if (topic === "cardiac history") {
+      const primary = ["heart", "cardiac", "coronary", "angina", "infarction", "stroke", "cholesterol", "attack"];
+      const hasPrimary = primary.some(kw => {
+        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
+      });
+      const familyTerms = ["father", "mother", "dad", "mom", "parents", "parent", "family", "history", "prior", "past", "before", "diagnosed"];
+      const hasFamilyOrPast = familyTerms.some(kw => {
+        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
+      });
+      mapping[topic] = hasPrimary && hasFamilyOrPast;
+    } else if (topic === "radiation") {
+      const primary = ["radiate", "radiates", "radiating", "spread", "spreads", "spreading", "go to", "going to", "travel", "travels", "traveling", "shoot", "shoots", "shooting"];
+      const hasPrimary = primary.some(kw => {
+        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
+      });
+      const anatomical = ["arm", "left arm", "neck", "jaw", "back", "shoulder", "chest"];
+      const hasAnatomical = anatomical.some(kw => {
+        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
+      });
+      mapping[topic] = hasPrimary && hasAnatomical;
+    } else {
+      // Default fuzzy match
+      const hasMatch = keywords.some(keyword => {
+        const escaped = keyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = keyword.length <= 3 ? new RegExp(`\\b${escaped}\\b`, 'i') : new RegExp(escaped, 'i');
+        return regex.test(dialogueText);
+      });
+      mapping[topic] = hasMatch;
+    }
+  }
+  return mapping;
+}
+
+async function extractTopicsWithQvac(turns, mustAsk, synonyms) {
+  const isSmallModel = activeModelName.includes("1B") || activeModelName.includes("600M") || !strictQvacMode;
+  if (isSmallModel) {
+    console.log(`[qvac] using deterministic topic extraction for ${activeModelName}`);
+    return extractTopicsDeterministic(turns, mustAsk, synonyms);
+  }
+
+  const readyModelId = await ensureModelLoaded();
+  const prompt = buildExtractTopicsPrompt(turns, mustAsk, synonyms);
+  const history = [
+    {
+      role: "system",
+      content: "You return only valid JSON mapping medical topics to booleans."
+    },
+    {
+      role: "user",
+      content: prompt
+    }
+  ];
+  const startedAt = performance.now();
+  const run = completion({
+    modelId: readyModelId,
+    history,
+    stream: false
+  });
+  const final = await run.final;
+  const raw = String(final.contentText ?? "");
+  const durationMs = Math.round(performance.now() - startedAt);
+  let parsed = null;
+  try {
+    parsed = extractJsonObject(raw);
+  } catch (error) {
+    console.error("[qvac] extract-topics parse failed:", error.message, "raw:", raw);
+    parsed = {};
+  }
+  await logInferenceEvent({
+    operation: "completion.extract_topics",
+    ok: true,
+    modelName: activeModelName,
+    modelId: readyModelId,
+    durationMs,
+    promptPreview: prompt.slice(0, 220),
+    inputTokensApprox: approximateTokens(prompt),
+    outputTokensApprox: approximateTokens(raw),
+    rawPreview: raw.slice(0, 500)
+  });
+  return parsed;
 }
 
 async function evaluateDebriefWithQvac(session, report, citations) {
@@ -1042,6 +1250,32 @@ const server = http.createServer(async (request, response) => {
         mode: strictQvacMode ? "strict-qvac-failed" : "deterministic-evaluator-fallback",
         error: message,
         evaluator: null
+      });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/extract-topics") {
+    try {
+      const body = await readJson(request);
+      if (!body.turns || !body.mustAsk) {
+        sendJson(response, 400, { error: "Turns and mustAsk are required." });
+        return;
+      }
+      const synonyms = body.synonyms || {};
+      console.log(`[qvac] extract-topics request for turns:`, JSON.stringify(body.turns.map(t => `${t.speaker}: ${t.text}`)));
+      const mapping = await extractTopicsWithQvac(body.turns, body.mustAsk, synonyms);
+      console.log(`[qvac] extract-topics output mapping:`, JSON.stringify(mapping));
+      sendJson(response, 200, {
+        ok: true,
+        mapping
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("[qvac] extract-topics failed:", message);
+      sendJson(response, 500, {
+        ok: false,
+        error: message
       });
     }
     return;
