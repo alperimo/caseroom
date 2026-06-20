@@ -714,72 +714,7 @@ function buildExtractTopicsPrompt(turns, mustAsk, synonyms) {
   ].join("\n");
 }
 
-function extractTopicsDeterministic(turns, mustAsk, synonyms) {
-  const dialogueText = turns.map(t => t.text).join(" ").toLowerCase();
-  const mapping = {};
-  
-  const contextualKeywords = new Set([
-    "father", "mother", "dad", "mom", "parents", "parent", "brother", "sister", "grandpa", "grandma", "family", "family history",
-    "arm", "left arm", "neck", "jaw", "back", "shoulder", "chest",
-    "stairs", "climbing", "climb", "walk", "walking", "run", "running", "exercise", "exertion"
-  ]);
-
-  for (const topic of mustAsk) {
-    const list = synonyms[topic] || [];
-    const keywords = [topic, ...list];
-    
-    // For specific chest-pain topics, apply contextual safeguards
-    if (topic === "shortness of breath") {
-      const primary = keywords.filter(k => !contextualKeywords.has(k.toLowerCase()));
-      const hasPrimary = primary.some(kw => {
-        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
-      });
-      mapping[topic] = hasPrimary;
-    } else if (topic === "cardiac history") {
-      const primary = ["heart", "cardiac", "coronary", "angina", "infarction", "stroke", "cholesterol", "attack"];
-      const hasPrimary = primary.some(kw => {
-        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
-      });
-      const familyTerms = ["father", "mother", "dad", "mom", "parents", "parent", "family", "history", "prior", "past", "before", "diagnosed"];
-      const hasFamilyOrPast = familyTerms.some(kw => {
-        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
-      });
-      mapping[topic] = hasPrimary && hasFamilyOrPast;
-    } else if (topic === "radiation") {
-      const primary = ["radiate", "radiates", "radiating", "spread", "spreads", "spreading", "go to", "going to", "travel", "travels", "traveling", "shoot", "shoots", "shooting"];
-      const hasPrimary = primary.some(kw => {
-        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
-      });
-      const anatomical = ["arm", "left arm", "neck", "jaw", "back", "shoulder", "chest"];
-      const hasAnatomical = anatomical.some(kw => {
-        const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        return new RegExp(kw.length <= 3 ? `\\b${escaped}\\b` : escaped, 'i').test(dialogueText);
-      });
-      mapping[topic] = hasPrimary && hasAnatomical;
-    } else {
-      // Default fuzzy match
-      const hasMatch = keywords.some(keyword => {
-        const escaped = keyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const regex = keyword.length <= 3 ? new RegExp(`\\b${escaped}\\b`, 'i') : new RegExp(escaped, 'i');
-        return regex.test(dialogueText);
-      });
-      mapping[topic] = hasMatch;
-    }
-  }
-  return mapping;
-}
-
 async function extractTopicsWithQvac(turns, mustAsk, synonyms) {
-  const isSmallModel = activeModelName.includes("1B") || activeModelName.includes("600M") || !strictQvacMode;
-  if (isSmallModel) {
-    console.log(`[qvac] using deterministic topic extraction for ${activeModelName}`);
-    return extractTopicsDeterministic(turns, mustAsk, synonyms);
-  }
-
   const readyModelId = await ensureModelLoaded();
   const prompt = buildExtractTopicsPrompt(turns, mustAsk, synonyms);
   const history = [

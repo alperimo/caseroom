@@ -2,7 +2,6 @@ import {
   addAction,
   appendTurn,
   evaluateEncounter,
-  revealTopic,
   setDiagnosis,
   setPlan,
   type ActionKind,
@@ -408,18 +407,6 @@ function normalizePromptForScenario(session: EncounterSession, prompt: string): 
   return normalizeMedicalTranscript(prompt, buildScenarioLexicon(session));
 }
 
-function applyPromptSignals(session: EncounterSession, prompt: string): EncounterSession {
-  let next = appendTurn(session, "clinician", prompt);
-
-  for (const topic of Object.keys(session.scenario.hiddenCase.truthTable)) {
-    if (promptMentionsTopic(prompt, topic, session)) {
-      next = revealTopic(next, topic);
-    }
-  }
-
-  return next;
-}
-
 function answerHistoryFallback(session: EncounterSession, prompt: string): EncounterSession {
   let next = appendTurn(session, "clinician", prompt);
   let matched = false;
@@ -441,7 +428,6 @@ function answerHistoryFallback(session: EncounterSession, prompt: string): Encou
   for (const [topic, answer] of Object.entries(session.scenario.hiddenCase.truthTable)) {
     if (promptMentionsTopic(prompt, topic, session)) {
       matched = true;
-      next = revealTopic(next, topic);
       next = appendTurn(next, "patient", answer);
       break;
     }
@@ -477,7 +463,7 @@ async function answerHistory(session: EncounterSession, prompt: string): Promise
       throw new Error("Runtime returned an empty reply.");
     }
 
-    const next = applyPromptSignals(session, prompt);
+    const next = appendTurn(session, "clinician", prompt);
     return addAction(appendTurn(next, "patient", payload.reply), "history");
   } catch {
     if (isStrictQvacMode()) {
