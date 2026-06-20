@@ -9,6 +9,7 @@ const rootDir = process.cwd();
 const outDir = path.join(rootDir, ".artifacts", "submission");
 const logDir = path.join(outDir, "logs");
 const performanceOutDir = path.join(outDir, "performance");
+const rootPerformanceSummaryPath = path.join(rootDir, ".artifacts", "performance", "inference-summary.json");
 const performanceLogCandidates = [
   path.join(rootDir, ".artifacts", "performance", "inference-events.jsonl"),
   path.join(rootDir, "packages", "qvac-runtime", ".artifacts", "performance", "inference-events.jsonl")
@@ -124,9 +125,11 @@ function summarizePerformanceLog(records, parseErrors, sourcePath) {
       ok: record.ok,
       durationMs: record.durationMs ?? null,
       ttftMs: record.ttftMs ?? null,
+      backendDevice: record.backendDevice ?? null,
       inputTokensApprox: record.inputTokensApprox ?? null,
       outputTokensApprox: record.outputTokensApprox ?? null,
       tokensPerSecondApprox: record.tokensPerSecondApprox ?? null,
+      outputChunks: record.outputChunks ?? null,
       promptPreview: record.promptPreview ?? null,
       transcriptPreview: record.transcriptPreview ?? null,
       textPreview: record.textPreview ?? null,
@@ -138,6 +141,13 @@ function summarizePerformanceLog(records, parseErrors, sourcePath) {
     ? Number((
         completionCalls.reduce((total, record) => total + Number(record.tokensPerSecondApprox ?? 0), 0) /
         completionCalls.length
+      ).toFixed(2))
+    : null;
+  const completionCallsWithTtft = completionCalls.filter((record) => typeof record.ttftMs === "number");
+  const averageCompletionTtftMs = completionCallsWithTtft.length
+    ? Number((
+        completionCallsWithTtft.reduce((total, record) => total + Number(record.ttftMs), 0) /
+        completionCallsWithTtft.length
       ).toFixed(2))
     : null;
 
@@ -154,10 +164,11 @@ function summarizePerformanceLog(records, parseErrors, sourcePath) {
       asrCalls: inferenceCalls.filter((record) => record.operation.startsWith("asr.")).length,
       ttsCalls: inferenceCalls.filter((record) => record.operation.startsWith("tts.")).length,
       ragCalls: inferenceCalls.filter((record) => record.operation.startsWith("rag.")).length,
-      averageCompletionTokensPerSecond
+      averageCompletionTokensPerSecond,
+      averageCompletionTtftMs
     },
     notes: [
-      "Completion TTFT is null when the QVAC call is executed through the current non-streaming path; durationMs and approximate tokens/sec are still captured.",
+      "Completion TTFT is captured for streamed QVAC completion calls. Non-completion operations such as ASR, TTS, and RAG may leave ttftMs null while still recording durationMs.",
       modelUnloads.length
         ? "Model unload events were captured in this run."
         : "No model unload event was captured because the demo bridge keeps local models loaded for the session."
@@ -252,7 +263,10 @@ if (performanceLogPath) {
   const content = await fs.readFile(performanceLogPath, "utf8");
   const { records, parseErrors } = parseJsonl(content);
   const summary = summarizePerformanceLog(records, parseErrors, performanceLogSource);
-  await fs.writeFile(path.join(performanceOutDir, "inference-summary.json"), JSON.stringify(summary, null, 2), "utf8");
+  const summaryJson = JSON.stringify(summary, null, 2);
+  await fs.writeFile(path.join(performanceOutDir, "inference-summary.json"), summaryJson, "utf8");
+  await fs.mkdir(path.dirname(rootPerformanceSummaryPath), { recursive: true });
+  await fs.writeFile(rootPerformanceSummaryPath, summaryJson, "utf8");
   performanceSummaryCopied = true;
 } else {
   await fs.writeFile(

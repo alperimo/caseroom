@@ -125,6 +125,53 @@ async function measured(operation, details, fn) {
   }
 }
 
+async function runStreamingCompletion({ modelId: completionModelId, history }) {
+  const startedAt = performance.now();
+  const run = completion({
+    modelId: completionModelId,
+    history,
+    stream: true
+  });
+
+  let firstTokenAt = null;
+  let outputText = "";
+  let outputChunks = 0;
+
+  for await (const token of run.tokenStream) {
+    if (firstTokenAt === null) {
+      firstTokenAt = performance.now();
+    }
+    outputText += String(token ?? "");
+    outputChunks += 1;
+  }
+
+  let stats = null;
+  try {
+    stats = await run.stats;
+  } catch (error) {
+    console.warn("[qvac] completion stats unavailable:", error instanceof Error ? error.message : String(error));
+  }
+
+  const durationMs = Math.round(performance.now() - startedAt);
+  const ttftMs = typeof stats?.timeToFirstToken === "number"
+    ? Math.round(stats.timeToFirstToken)
+    : firstTokenAt === null
+      ? null
+      : Math.round(firstTokenAt - startedAt);
+  const tokensPerSecondApprox = typeof stats?.tokensPerSecond === "number"
+    ? Number(stats.tokensPerSecond.toFixed(2))
+    : Number((approximateTokens(outputText) / Math.max(0.001, durationMs / 1000)).toFixed(2));
+
+  return {
+    outputText,
+    durationMs,
+    ttftMs,
+    tokensPerSecondApprox,
+    backendDevice: stats?.backendDevice ?? null,
+    outputChunks
+  };
+}
+
 async function enqueue(queueName, fn) {
   const previousQueue = queueName === "asr" ? asrQueue : ragSearchQueue;
   const run = previousQueue.catch(() => {}).then(fn);
@@ -538,16 +585,12 @@ async function generatePatientReply(session, prompt) {
 
   const readyModelId = await ensureModelLoaded();
   const history = buildHistory(session, prompt);
-  const startedAt = performance.now();
-  const run = completion({
+  const completionResult = await runStreamingCompletion({
     modelId: readyModelId,
-    history,
-    stream: false
+    history
   });
-  const final = await run.final;
-  const rawReply = String(final.contentText ?? "");
+  const rawReply = completionResult.outputText;
   const reply = sanitizePatientReply(rawReply, session);
-  const durationMs = Math.round(performance.now() - startedAt);
   await logInferenceEvent({
     operation: "completion.patient_turn",
     ok: true,
@@ -555,11 +598,14 @@ async function generatePatientReply(session, prompt) {
     modelId: readyModelId,
     caseId: session.scenario.id,
     promptPreview: prompt.slice(0, 220),
+    promptText: prompt,
     inputTokensApprox: approximateTokens(history.map((turn) => turn.content).join(" ")),
     outputTokensApprox: approximateTokens(reply),
-    durationMs,
-    ttftMs: null,
-    tokensPerSecondApprox: Number((approximateTokens(reply) / Math.max(0.001, durationMs / 1000)).toFixed(2)),
+    durationMs: completionResult.durationMs,
+    ttftMs: completionResult.ttftMs,
+    tokensPerSecondApprox: completionResult.tokensPerSecondApprox,
+    backendDevice: completionResult.backendDevice,
+    outputChunks: completionResult.outputChunks,
     sanitized: rawReply.trim() !== reply.trim()
   });
   return reply;
@@ -727,15 +773,11 @@ async function extractTopicsWithQvac(turns, mustAsk, synonyms) {
       content: prompt
     }
   ];
-  const startedAt = performance.now();
-  const run = completion({
+  const completionResult = await runStreamingCompletion({
     modelId: readyModelId,
-    history,
-    stream: false
+    history
   });
-  const final = await run.final;
-  const raw = String(final.contentText ?? "");
-  const durationMs = Math.round(performance.now() - startedAt);
+  const raw = completionResult.outputText;
   let parsed = null;
   try {
     parsed = extractJsonObject(raw);
@@ -748,8 +790,13 @@ async function extractTopicsWithQvac(turns, mustAsk, synonyms) {
     ok: true,
     modelName: activeModelName,
     modelId: readyModelId,
-    durationMs,
+    durationMs: completionResult.durationMs,
+    ttftMs: completionResult.ttftMs,
+    tokensPerSecondApprox: completionResult.tokensPerSecondApprox,
+    backendDevice: completionResult.backendDevice,
+    outputChunks: completionResult.outputChunks,
     promptPreview: prompt.slice(0, 220),
+    promptText: prompt,
     inputTokensApprox: approximateTokens(prompt),
     outputTokensApprox: approximateTokens(raw),
     rawPreview: raw.slice(0, 500)
@@ -771,15 +818,11 @@ async function evaluateDebriefWithQvac(session, report, citations) {
     }
   ];
 
-  const startedAt = performance.now();
-  const run = completion({
+  const completionResult = await runStreamingCompletion({
     modelId: readyModelId,
-    history,
-    stream: false
+    history
   });
-  const final = await run.final;
-  const raw = String(final.contentText ?? "");
-  const durationMs = Math.round(performance.now() - startedAt);
+  const raw = completionResult.outputText;
   let parsed = null;
   let parsedJson = true;
   try {
@@ -792,7 +835,8 @@ async function evaluateDebriefWithQvac(session, report, citations) {
       modelName: activeModelName,
       modelId: readyModelId,
       caseId: session.scenario.id,
-      durationMs,
+      durationMs: completionResult.durationMs,
+      ttftMs: completionResult.ttftMs,
       error: error instanceof Error ? error.message : String(error),
       rawPreview: raw.slice(0, 500)
     });
@@ -804,11 +848,14 @@ async function evaluateDebriefWithQvac(session, report, citations) {
     modelId: readyModelId,
     caseId: session.scenario.id,
     promptPreview: prompt.slice(0, 220),
+    promptText: prompt,
     inputTokensApprox: approximateTokens(prompt),
     outputTokensApprox: approximateTokens(raw),
-    durationMs,
-    ttftMs: null,
-    tokensPerSecondApprox: Number((approximateTokens(raw) / Math.max(0.001, durationMs / 1000)).toFixed(2)),
+    durationMs: completionResult.durationMs,
+    ttftMs: completionResult.ttftMs,
+    tokensPerSecondApprox: completionResult.tokensPerSecondApprox,
+    backendDevice: completionResult.backendDevice,
+    outputChunks: completionResult.outputChunks,
     parsedJson,
     rawPreview: raw.slice(0, 500)
   });
