@@ -28,6 +28,7 @@ import {
   orderDiagnosticTest,
   performExam,
   revealTopic,
+  setDiagnosis,
   type ActionKind,
   type DiagnosticTestOption,
   type EncounterSession,
@@ -324,12 +325,30 @@ function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind,
     return {
       kind,
       eyebrow: "Clinical impression",
-      title: "Working diagnosis",
-      summary: session.diagnosisText ?? "A working diagnosis needs enough history, exam, or test evidence.",
+      title: session.diagnosisText ? "Working diagnosis selected" : "Choose working diagnosis",
+      summary: session.diagnosisText ?? "Choose the working diagnosis you want to commit to before planning.",
       items: missingTopics.length > 0
         ? missingTopics.map((topic) => `Still clarify: ${topic}`)
         : ["Key critical topics have been addressed."],
-      choices: [],
+      choices: [
+        {
+          id: "case-diagnosis",
+          label: session.scenario.hiddenCase.diagnosis,
+          detail: session.diagnosisText === session.scenario.hiddenCase.diagnosis
+            ? "Selected working diagnosis"
+            : "Commit this working diagnosis",
+          selected: session.diagnosisText === session.scenario.hiddenCase.diagnosis,
+          safe: true
+        },
+        {
+          id: "defer-diagnosis",
+          label: "More history needed before diagnosis",
+          detail: session.diagnosisText === "More history needed before diagnosis"
+            ? "Selected defer state"
+            : "Use if the evidence is not enough yet",
+          selected: session.diagnosisText === "More history needed before diagnosis"
+        }
+      ],
       primaryLabel: "Use in plan",
       statusLabel: missingTopics.length > 0 ? "Provisional" : "Ready for plan",
       nextStep: missingTopics.length > 0
@@ -857,6 +876,18 @@ export function App() {
     const nextSession = choosePlanOption(session, planOptionId);
     setSession(nextSession);
     setActiveActionOverlay(buildActionOverlay(nextSession, "treatment_plan"));
+  }
+
+  function selectDiagnosis(diagnosisChoiceId: string) {
+    if (!session) {
+      return;
+    }
+    const diagnosisText = diagnosisChoiceId === "case-diagnosis"
+      ? session.scenario.hiddenCase.diagnosis
+      : "More history needed before diagnosis";
+    const nextSession = setDiagnosis(session, diagnosisText);
+    setSession(nextSession);
+    setActiveActionOverlay(buildActionOverlay(nextSession, "diagnose"));
   }
 
   function documentSafety() {
@@ -1616,6 +1647,8 @@ export function App() {
                                 selectExam(choice.id);
                               } else if (activeActionOverlay.kind === "order_test") {
                                 selectTest(choice.id);
+                              } else if (activeActionOverlay.kind === "diagnose") {
+                                selectDiagnosis(choice.id);
                               } else if (activeActionOverlay.kind === "treatment_plan") {
                                 selectPlan(choice.id);
                               }
