@@ -135,8 +135,11 @@ Verification and artifact collection:
 
 ```bash
 npm run verify
+npm run qvac:shutdown
 npm run evidence:bundle
 ```
+
+Run `npm run qvac:shutdown` before stopping the dev terminal for the final evidence pass. It asks the local QVAC bridge to unload tracked models through the SDK and writes real `model.unload` events with timestamps and durations into `.artifacts/performance/inference-events.jsonl`. After it returns, stop the dev process and collect the bundle.
 
 `npm run evidence:bundle` writes `.artifacts/submission/` with:
 

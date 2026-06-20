@@ -22,7 +22,8 @@ import {
   ragSaveEmbeddings,
   ragSearch,
   transcribe,
-  textToSpeech
+  textToSpeech,
+  unloadModel
 } from "@qvac/sdk";
 import { bundledRagDocuments, ragWorkspaceVersion } from "./rag-documents.mjs";
 
@@ -74,6 +75,7 @@ let ttsReady = false;
 let lastTtsError = null;
 let asrReady = false;
 let lastAsrError = null;
+let shutdownPromise = null;
 
 const ttsSampleRate = 44100;
 
@@ -93,6 +95,98 @@ async function logInferenceEvent(event) {
   } catch (error) {
     console.error("[qvac] could not write inference log:", error instanceof Error ? error.message : String(error));
   }
+}
+
+async function closeHttpServer() {
+  if (!server.listening) {
+    return;
+  }
+  await new Promise((resolve) => {
+    server.close(() => resolve());
+    setTimeout(resolve, 1000).unref();
+  });
+}
+
+async function unloadTrackedModel({ id, modelName, modelType, clear }) {
+  if (!id) {
+    return;
+  }
+  const startedAt = performance.now();
+  try {
+    await unloadModel({ modelId: id });
+    await logInferenceEvent({
+      operation: "model.unload",
+      ok: true,
+      modelName,
+      modelType,
+      modelId: id,
+      durationMs: Math.round(performance.now() - startedAt)
+    });
+    clear();
+  } catch (error) {
+    await logInferenceEvent({
+      operation: "model.unload",
+      ok: false,
+      modelName,
+      modelType,
+      modelId: id,
+      durationMs: Math.round(performance.now() - startedAt),
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+async function unloadAllTrackedModels(signal) {
+  console.log(`[qvac] ${signal}; unloading tracked models before SDK transport closes...`);
+
+  await unloadTrackedModel({
+    id: ttsModelId,
+    modelName: "TTS_EN_SUPERTONIC_Q8_0",
+    modelType: "tts",
+    clear: () => {
+      ttsModelId = null;
+      ttsReady = false;
+    }
+  });
+  await unloadTrackedModel({
+    id: asrModelId,
+    modelName: activeAsrModelName,
+    modelType: "asr",
+    clear: () => {
+      asrModelId = null;
+      asrReady = false;
+    }
+  });
+  await unloadTrackedModel({
+    id: embeddingModelId,
+    modelName: "GTE_LARGE_FP16",
+    modelType: "embedding",
+    clear: () => {
+      embeddingModelId = null;
+      ragReady = false;
+    }
+  });
+  await unloadTrackedModel({
+    id: modelId,
+    modelName: activeModelName,
+    modelType: "completion",
+    clear: () => {
+      modelId = null;
+    }
+  });
+
+  console.log("[qvac] tracked model unload logging completed.");
+}
+
+async function shutdown(signal) {
+  if (shutdownPromise) {
+    return shutdownPromise;
+  }
+  shutdownPromise = (async () => {
+    await closeHttpServer();
+    await unloadAllTrackedModels(`received ${signal}`);
+  })();
+  return shutdownPromise;
 }
 
 async function measured(operation, details, fn) {
@@ -1029,6 +1123,24 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "POST" && request.url === "/shutdown") {
+    try {
+      await unloadAllTrackedModels("graceful shutdown requested");
+      sendJson(response, 200, {
+        ok: true,
+        mode: "qvac-graceful-unload",
+        performanceLogPath
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      sendJson(response, 500, {
+        ok: false,
+        error: message
+      });
+    }
+    return;
+  }
+
   if (request.method === "POST" && request.url === "/warmup") {
     try {
       await ensureModelLoaded();
@@ -1281,3 +1393,16 @@ void ensureRagWorkspace();
 server.listen(port, "127.0.0.1", () => {
   console.log(`[qvac] bridge listening on http://127.0.0.1:${port}`);
 });
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.removeAllListeners(signal);
+  process.once(signal, () => {
+    void shutdown(signal)
+      .catch((error) => {
+        console.error("[qvac] shutdown failed:", error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        process.exit(signal === "SIGINT" ? 130 : 143);
+      });
+  });
+}

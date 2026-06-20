@@ -16,6 +16,7 @@
     "typecheck": "npm run typecheck --workspace @caseroom/desktop",
     "test": "vitest run packages/simulation-core/src/index.test.ts packages/qvac-runtime/src/index.test.ts",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "qvac:shutdown": "node -e \"const base=process.env.CASE_ROOM_QVAC_URL||'http://127.0.0.1:4545'; fetch(base + '/shutdown',{method:'POST'}).then(r=>r.text()).then(t=>console.log(t)).catch(e=>{console.error(e.message);process.exit(1)})\"",
     "evidence:bundle": "node scripts/collect-submission-artifacts.mjs"
   },
   "devDependencies": {

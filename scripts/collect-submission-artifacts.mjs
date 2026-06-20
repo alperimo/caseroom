@@ -14,6 +14,7 @@ const performanceLogCandidates = [
   path.join(rootDir, ".artifacts", "performance", "inference-events.jsonl"),
   path.join(rootDir, "packages", "qvac-runtime", ".artifacts", "performance", "inference-events.jsonl")
 ];
+const terminalLogPath = path.join(rootDir, ".artifacts", "performance", "terminal-logs.txt");
 const remoteApiManifestPath = path.join(rootDir, "remote-api-calls.json");
 
 async function run(command, args, options = {}) {
@@ -171,7 +172,7 @@ function summarizePerformanceLog(records, parseErrors, sourcePath) {
       "Completion TTFT is captured for streamed QVAC completion calls. Non-completion operations such as ASR, TTS, and RAG may leave ttftMs null while still recording durationMs.",
       modelUnloads.length
         ? "Model unload events were captured in this run."
-        : "No model unload event was captured because the demo bridge keeps local models loaded for the session."
+        : "No structured model unload event was captured. Stop the QVAC bridge with the current runtime shutdown handler to record model.unload timestamps and durations."
     ]
   };
 }
@@ -261,6 +262,12 @@ if (performanceLogPath) {
   await fs.copyFile(performanceLogPath, copiedLogPath);
   performanceLogCopied = true;
   const content = await fs.readFile(performanceLogPath, "utf8");
+  if (await fileExists(terminalLogPath)) {
+    const copiedTerminalLogPath = path.join(performanceOutDir, "terminal-logs.txt");
+    if (path.resolve(terminalLogPath) !== path.resolve(copiedTerminalLogPath)) {
+      await fs.copyFile(terminalLogPath, copiedTerminalLogPath);
+    }
+  }
   const { records, parseErrors } = parseJsonl(content);
   const summary = summarizePerformanceLog(records, parseErrors, performanceLogSource);
   const summaryJson = JSON.stringify(summary, null, 2);
