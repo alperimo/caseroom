@@ -2188,6 +2188,64 @@ textarea {
   line-height: 1.4;
 }
 
+.overlay-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.overlay-choice-card {
+  display: grid;
+  gap: 8px;
+  min-height: 96px;
+  padding: 14px 16px;
+  border: 2px solid rgba(45, 33, 27, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.overlay-choice-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(45, 33, 27, 0.34);
+  box-shadow: 0 12px 24px rgba(45, 33, 27, 0.12);
+}
+
+.overlay-choice-card span {
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.overlay-choice-card small {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.overlay-choice-card.selected {
+  border-color: rgba(36, 117, 104, 0.52);
+  background: rgba(232, 250, 241, 0.88);
+  box-shadow: inset 0 0 0 2px rgba(36, 117, 104, 0.08);
+}
+
+.overlay-choice-card.unsafe.selected {
+  border-color: rgba(181, 80, 41, 0.54);
+  background: rgba(255, 237, 226, 0.9);
+}
+
+.overlay-choice-card.safe.selected {
+  border-color: rgba(36, 117, 104, 0.58);
+}
+
 .overlay-next-step {
   display: grid;
   gap: 6px;

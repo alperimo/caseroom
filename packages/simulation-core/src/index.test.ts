@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   addAction,
+  choosePlanOption,
   createSession,
   evaluateEncounter,
+  orderDiagnosticTest,
+  performExam,
   revealTopic,
   setPlan,
   type MedicalScenario
@@ -33,7 +36,38 @@ const scenario: MedicalScenario = {
       "cardiac history": "My father had a heart attack."
     },
     examFindings: ["Clammy appearance."],
+    examOptions: [
+      {
+        id: "auscultation",
+        label: "Cardiopulmonary auscultation",
+        finding: "Clear lungs, normal S1/S2."
+      }
+    ],
     testResults: ["ECG abnormal."],
+    testOptions: [
+      {
+        id: "ecg",
+        label: "12-lead ECG",
+        result: "Anterior ST-segment depression.",
+        riskImpact: "critical"
+      }
+    ],
+    planOptions: [
+      {
+        id: "discharge",
+        label: "Discharge",
+        safe: false,
+        summary: "Reassure and discharge.",
+        checklist: ["No urgent escalation"]
+      },
+      {
+        id: "acs-pathway",
+        label: "Urgent ACS pathway",
+        safe: true,
+        summary: "Urgent ACS pathway and hospital escalation.",
+        checklist: ["Do not discharge", "Escalate urgently"]
+      }
+    ],
     safetyNet: ["worsening chest pain", "collapse"]
   },
   rubric: { communication: 20, history: 30, clinicalReasoning: 30, safety: 20 },
@@ -79,5 +113,21 @@ describe("simulation-core encounter transitions", () => {
     expect(report.gaps).not.toContain(
       "The encounter suggested urgent escalation, but the final plan did not clearly act on it.",
     );
+  });
+
+  it("tracks explicit learner decisions for exams, tests, and plans", () => {
+    let session = createSession(scenario);
+    expect(session.testsOrdered).toBe(0);
+
+    session = performExam(session, "auscultation");
+    session = orderDiagnosticTest(session, "ecg");
+    session = choosePlanOption(session, "acs-pathway");
+
+    expect(session.decisionLog.examIds).toEqual(["auscultation"]);
+    expect(session.decisionLog.testIds).toEqual(["ecg"]);
+    expect(session.decisionLog.planOptionId).toBe("acs-pathway");
+    expect(session.testsOrdered).toBe(1);
+    expect(session.actionLog).toEqual(["examine", "order_test", "treatment_plan"]);
+    expect(session.planText).toContain("Urgent ACS pathway");
   });
 });

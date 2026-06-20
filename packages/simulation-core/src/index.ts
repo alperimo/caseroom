@@ -20,6 +20,30 @@ export type LocalCitation = {
   excerpt: string;
 };
 
+export type ExamOption = {
+  id: string;
+  label: string;
+  finding: string;
+  interpretation?: string;
+};
+
+export type DiagnosticTestOption = {
+  id: string;
+  label: string;
+  result: string;
+  interpretation?: string;
+  riskImpact?: RiskLevel;
+};
+
+export type PlanOption = {
+  id: string;
+  label: string;
+  safe: boolean;
+  summary: string;
+  checklist: string[];
+  feedback?: string;
+};
+
 export type MedicalScenario = {
   id: string;
   title: string;
@@ -46,7 +70,10 @@ export type MedicalScenario = {
     redFlags: string[];
     truthTable: Record<string, string>;
     examFindings: string[];
+    examOptions?: ExamOption[];
     testResults: string[];
+    testOptions?: DiagnosticTestOption[];
+    planOptions?: PlanOption[];
     safetyNet: string[];
     synonyms?: Record<string, string[]>;
   };
@@ -77,12 +104,27 @@ export type EncounterSession = {
   revealedTopics: string[];
   diagnosisText: string | null;
   planText: string | null;
+  decisionLog: {
+    examIds: string[];
+    testIds: string[];
+    planOptionId: string | null;
+    safetyNetDocumented: boolean;
+  };
   latestPatientMood: string;
   progress: EncounterProgress;
   turnCount: number;
   examPerformed: boolean;
   testsOrdered: number;
 };
+
+function normalizeDecisionLog(session: Pick<EncounterSession, "decisionLog">): EncounterSession["decisionLog"] {
+  return session.decisionLog ?? {
+    examIds: [],
+    testIds: [],
+    planOptionId: null,
+    safetyNetDocumented: false
+  };
+}
 
 export type DebriefReport = {
   title: string;
@@ -102,6 +144,10 @@ const defaultTimerByDifficulty: Record<Difficulty, number> = {
 function parseSystolic(bp: string): number {
   const [systolic] = bp.split("/");
   return Number.parseInt(systolic ?? "0", 10);
+}
+
+function appendActionOnce(actionLog: ActionKind[], action: ActionKind): ActionKind[] {
+  return actionLog.includes(action) ? actionLog : [...actionLog, action];
 }
 
 function withDerivedState(session: Omit<EncounterSession, "latestPatientMood" | "progress">): EncounterSession {
@@ -146,10 +192,12 @@ function deriveEncounterProgress(
     escalationReasons.push(`Red flag revealed: ${flag}.`);
   }
 
-  if (session.examPerformed && session.scenario.hiddenCase.examFindings.length > 0) {
+  const decisionLog = normalizeDecisionLog(session);
+
+  if ((session.examPerformed || decisionLog.examIds.length > 0) && session.scenario.hiddenCase.examFindings.length > 0) {
     escalationReasons.push("Physical exam findings now contribute to urgency assessment.");
   }
-  if (session.testsOrdered > 0 && session.scenario.hiddenCase.testResults.length > 0) {
+  if ((session.testsOrdered > 0 || decisionLog.testIds.length > 0) && session.scenario.hiddenCase.testResults.length > 0) {
     escalationReasons.push("Diagnostic test results are available for interpretation.");
   }
 
@@ -231,6 +279,12 @@ export function createSession(scenario: MedicalScenario): EncounterSession {
     revealedTopics: [],
     diagnosisText: null,
     planText: null,
+    decisionLog: {
+      examIds: [],
+      testIds: [],
+      planOptionId: null,
+      safetyNetDocumented: false
+    },
     turnCount: 1,
     examPerformed: false,
     testsOrdered: 0
@@ -255,6 +309,67 @@ export function addAction(session: EncounterSession, action: ActionKind): Encoun
     actionLog: [...session.actionLog, action],
     examPerformed: session.examPerformed || action === "examine",
     testsOrdered: session.testsOrdered + (action === "order_test" ? 1 : 0)
+  });
+}
+
+export function performExam(session: EncounterSession, examId: string): EncounterSession {
+  const decisionLog = normalizeDecisionLog(session);
+  const examIds = decisionLog.examIds.includes(examId)
+    ? decisionLog.examIds
+    : [...decisionLog.examIds, examId];
+  return withDerivedState({
+    ...session,
+    actionLog: appendActionOnce(session.actionLog, "examine"),
+    decisionLog: {
+      ...decisionLog,
+      examIds
+    },
+    examPerformed: true
+  });
+}
+
+export function orderDiagnosticTest(session: EncounterSession, testId: string): EncounterSession {
+  const decisionLog = normalizeDecisionLog(session);
+  const testIds = decisionLog.testIds.includes(testId)
+    ? decisionLog.testIds
+    : [...decisionLog.testIds, testId];
+  return withDerivedState({
+    ...session,
+    actionLog: appendActionOnce(session.actionLog, "order_test"),
+    decisionLog: {
+      ...decisionLog,
+      testIds
+    },
+    testsOrdered: testIds.length
+  });
+}
+
+export function choosePlanOption(session: EncounterSession, planOptionId: string): EncounterSession {
+  const decisionLog = normalizeDecisionLog(session);
+  const selected = session.scenario.hiddenCase.planOptions?.find((option) => option.id === planOptionId);
+  return withDerivedState({
+    ...session,
+    actionLog: appendActionOnce(session.actionLog, "treatment_plan"),
+    decisionLog: {
+      ...decisionLog,
+      planOptionId
+    },
+    planText: selected?.summary ?? session.planText ?? null
+  });
+}
+
+export function documentSafetyNet(session: EncounterSession): EncounterSession {
+  const decisionLog = normalizeDecisionLog(session);
+  return withDerivedState({
+    ...session,
+    actionLog: appendActionOnce(session.actionLog, "safety_net"),
+    decisionLog: {
+      ...decisionLog,
+      safetyNetDocumented: true
+    },
+    planText: session.planText
+      ? `${session.planText} Safety-net advice covered.`
+      : "Safety-net advice covered."
   });
 }
 
@@ -293,8 +408,13 @@ export function evaluateEncounter(session: EncounterSession): DebriefReport {
   const diagnosisMatch =
     session.diagnosisText?.toLowerCase().includes(session.scenario.hiddenCase.diagnosis.toLowerCase()) ?? false;
   const planIncluded = Boolean(session.planText);
+  const selectedPlan = session.scenario.hiddenCase.planOptions?.find(
+    (option) => option.id === normalizeDecisionLog(session).planOptionId,
+  );
   const escalationBonus =
-    session.progress.needsUrgentEscalation && planIncluded && session.planText?.toLowerCase().includes("urgent")
+    session.progress.needsUrgentEscalation &&
+    planIncluded &&
+    (selectedPlan?.safe || session.planText?.toLowerCase().includes("urgent"))
       ? 10
       : 0;
 
@@ -311,6 +431,9 @@ export function evaluateEncounter(session: EncounterSession): DebriefReport {
   const strengths = [
     mustAskHits.length >= 2 ? "Focused history captured multiple required questions." : null,
     actionCoverage.has("order_test") ? "You used the action system to gather additional evidence." : null,
+    normalizeDecisionLog(session).testIds.length > 0
+      ? "You selected diagnostic tests rather than passively reviewing hints."
+      : null,
     diagnosisMatch ? "Final diagnosis matched the hidden case." : null,
     planIncluded ? "A treatment or management plan was documented." : null,
     session.progress.needsUrgentEscalation && escalationBonus > 0

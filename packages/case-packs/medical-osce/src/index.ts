@@ -25,7 +25,55 @@ export const medicalCasePack: MedicalScenario[] = [
         allergies: "I do not have any medication allergies."
       },
       examFindings: ["Soft non-tender abdomen.", "No costovertebral-angle tenderness."],
+      examOptions: [
+        {
+          id: "abdomen",
+          label: "Abdominal exam",
+          finding: "Soft non-tender abdomen.",
+          interpretation: "No peritonism or suprapubic guarding is evident."
+        },
+        {
+          id: "cva-tenderness",
+          label: "Check flank tenderness",
+          finding: "No costovertebral-angle tenderness.",
+          interpretation: "This lowers concern for pyelonephritis when paired with no fever."
+        }
+      ],
       testResults: ["Urine dip: positive leukocytes and nitrites."],
+      testOptions: [
+        {
+          id: "urine-dip",
+          label: "Urine dipstick",
+          result: "Positive leukocytes and nitrites.",
+          interpretation: "Supports lower urinary tract infection if pregnancy and upper-tract red flags are absent.",
+          riskImpact: "elevated"
+        },
+        {
+          id: "pregnancy-test",
+          label: "Pregnancy test",
+          result: "Negative.",
+          interpretation: "Helps confirm the lower-risk outpatient pathway for this case.",
+          riskImpact: "low"
+        }
+      ],
+      planOptions: [
+        {
+          id: "antibiotics-safety-net",
+          label: "Treat lower UTI with safety-net",
+          safe: true,
+          summary: "Treat presumed uncomplicated lower UTI and explain safety-net advice.",
+          checklist: ["Confirm no pregnancy", "Check allergies", "Treat according to local guidance", "Return if fever, vomiting, flank pain, or worsening symptoms"],
+          feedback: "Safe if pregnancy, allergy, fever, and flank pain have been checked."
+        },
+        {
+          id: "reassure-no-net",
+          label: "Reassure without treatment",
+          safe: false,
+          summary: "Reassure without treatment or safety-net advice.",
+          checklist: ["Symptom relief only"],
+          feedback: "Unsafe for the simulation because the urine symptoms need treatment planning and explicit return precautions."
+        }
+      ],
       safetyNet: ["fever", "vomiting", "worsening pain", "new back pain"],
       synonyms: {
         pregnancy: ["pregnant", "pregnancy", "contraception", "period", "periods", "menstruation", "last period", "childbearing"],
@@ -72,7 +120,76 @@ export const medicalCasePack: MedicalScenario[] = [
         "cardiac history": "My father had a heart attack in his early sixties."
       },
       examFindings: ["Patient appears clammy.", "No focal chest wall tenderness."],
+      examOptions: [
+        {
+          id: "cardiopulmonary-auscultation",
+          label: "Cardiopulmonary auscultation",
+          finding: "Clear lungs, normal S1/S2, no new murmur.",
+          interpretation: "No alternate low-risk explanation is found on brief exam."
+        },
+        {
+          id: "peripheral-pulses",
+          label: "Assess peripheral pulses",
+          finding: "Peripheral pulses present and symmetrical.",
+          interpretation: "No obvious pulse deficit, but ACS concern remains driven by history and ECG."
+        },
+        {
+          id: "chest-wall",
+          label: "Palpate chest wall",
+          finding: "No focal chest wall tenderness.",
+          interpretation: "Reproducible musculoskeletal pain is not demonstrated."
+        }
+      ],
       testResults: ["ECG: anterior ST-segment depression.", "Troponin pending."],
+      testOptions: [
+        {
+          id: "ecg-12-lead",
+          label: "12-lead ECG",
+          result: "Anterior ST-segment depression.",
+          interpretation: "This increases concern for acute myocardial ischemia.",
+          riskImpact: "critical"
+        },
+        {
+          id: "troponin",
+          label: "Troponin",
+          result: "Pending.",
+          interpretation: "Do not wait for troponin before escalating a high-risk presentation.",
+          riskImpact: "high"
+        },
+        {
+          id: "chest-xray",
+          label: "Chest X-ray",
+          result: "No widened mediastinum or focal consolidation reported.",
+          interpretation: "Does not remove the urgent ACS concern.",
+          riskImpact: "high"
+        }
+      ],
+      planOptions: [
+        {
+          id: "discharge",
+          label: "Reassure and discharge",
+          safe: false,
+          summary: "Reassure and discharge.",
+          checklist: ["No urgent escalation"],
+          feedback: "Unsafe: exertional heavy chest pain with ischemic ECG changes needs urgent escalation."
+        },
+        {
+          id: "routine-follow-up",
+          label: "Routine GP follow-up",
+          safe: false,
+          summary: "Arrange routine follow-up.",
+          checklist: ["Routine outpatient review"],
+          feedback: "Unsafe: this delays assessment of a possible acute coronary syndrome."
+        },
+        {
+          id: "urgent-acs-pathway",
+          label: "Urgent escalation / ACS pathway",
+          safe: true,
+          summary: "Urgent ACS escalation: give aspirin if not contraindicated, monitor vitals, repeat ECG/troponin, and escalate to emergency or cardiology care.",
+          checklist: ["Do not discharge", "Give aspirin if not contraindicated", "Monitor vitals", "Repeat ECG/troponin", "Escalate urgently to emergency/cardiology care"],
+          feedback: "Safe direction: the plan addresses the immediate risk. Mention contraindications and serial ECG/troponin follow-up clearly."
+        }
+      ],
       safetyNet: ["worsening pain", "collapse", "sudden breathlessness", "persistent pressure"],
       synonyms: {
         radiation: ["radiate", "radiates", "radiating", "spread", "spreads", "spreading", "go to", "going to", "travel", "travels", "traveling", "shoot", "shoots", "shooting", "left arm", "neck", "jaw", "back"],
@@ -119,7 +236,62 @@ export const medicalCasePack: MedicalScenario[] = [
         diet: "I do eat meat but I have had less appetite lately."
       },
       examFindings: ["Looks pale but well perfused.", "No abdominal tenderness."],
+      examOptions: [
+        {
+          id: "general-appearance",
+          label: "General appearance",
+          finding: "Looks pale but well perfused.",
+          interpretation: "Supports anemia concern without current shock."
+        },
+        {
+          id: "abdominal-exam",
+          label: "Abdominal exam",
+          finding: "No abdominal tenderness.",
+          interpretation: "No acute abdominal finding is evident in this brief exam."
+        }
+      ],
       testResults: ["FBC: microcytic anemia, Hb 9.4 g/dL.", "Ferritin low."],
+      testOptions: [
+        {
+          id: "fbc",
+          label: "Full blood count",
+          result: "Microcytic anemia, Hb 9.4 g/dL.",
+          interpretation: "Confirms clinically significant anemia.",
+          riskImpact: "high"
+        },
+        {
+          id: "ferritin",
+          label: "Ferritin",
+          result: "Low.",
+          interpretation: "Supports iron deficiency as the likely mechanism.",
+          riskImpact: "elevated"
+        },
+        {
+          id: "pregnancy-test",
+          label: "Pregnancy test",
+          result: "Negative.",
+          interpretation: "Important before selecting medication and follow-up pathway.",
+          riskImpact: "low"
+        }
+      ],
+      planOptions: [
+        {
+          id: "iron-workup-followup",
+          label: "Treat anemia and investigate bleeding",
+          safe: true,
+          summary: "Start iron replacement, investigate heavy menstrual bleeding, and arrange timely follow-up with safety-net advice.",
+          checklist: ["Confirm pregnancy status", "Start iron replacement", "Investigate heavy bleeding", "Arrange follow-up blood tests", "Safety-net worsening anemia symptoms"],
+          feedback: "Safe direction if severe symptoms and pregnancy have been checked."
+        },
+        {
+          id: "reassure-fatigue",
+          label: "Reassure as stress-related fatigue",
+          safe: false,
+          summary: "Reassure as stress-related fatigue.",
+          checklist: ["Lifestyle advice only"],
+          feedback: "Unsafe: heavy bleeding and microcytic anemia need treatment and follow-up."
+        }
+      ],
       safetyNet: ["fainting", "chest pain", "bleeding getting much heavier", "breathlessness at rest"],
       synonyms: {
         duration: ["long", "start", "started", "begin", "began", "since when", "how long", "weeks", "months", "days"],
@@ -166,7 +338,55 @@ export const medicalCasePack: MedicalScenario[] = [
         "medication adherence": "I stopped taking my tablets regularly a few weeks ago because they made me feel tired."
       },
       examFindings: ["Alert and oriented.", "No focal neurological deficit on brief examination."],
+      examOptions: [
+        {
+          id: "neuro-screen",
+          label: "Focused neurological screen",
+          finding: "Alert and oriented; no focal neurological deficit.",
+          interpretation: "No obvious stroke-like deficit is found on brief screening."
+        },
+        {
+          id: "repeat-bp",
+          label: "Repeat blood pressure",
+          finding: "Repeat BP remains severely elevated.",
+          interpretation: "Persistent severe BP keeps urgent assessment on the table."
+        }
+      ],
       testResults: ["Repeat BP remains severely elevated.", "Urine dip: no protein, no blood."],
+      testOptions: [
+        {
+          id: "urine-dip",
+          label: "Urine dip",
+          result: "No protein, no blood.",
+          interpretation: "No dipstick evidence of renal end-organ involvement in this brief scenario.",
+          riskImpact: "elevated"
+        },
+        {
+          id: "ecg",
+          label: "ECG",
+          result: "No acute ischemic changes.",
+          interpretation: "Cardiac symptoms still need history; this ECG does not show acute ischemia.",
+          riskImpact: "elevated"
+        }
+      ],
+      planOptions: [
+        {
+          id: "urgent-bp-assessment",
+          label: "Urgent same-day assessment",
+          safe: true,
+          summary: "Arrange urgent same-day assessment for severely elevated BP, screen end-organ symptoms, address medication adherence, and safety-net red flags.",
+          checklist: ["Repeat BP", "Screen chest pain, neuro, visual symptoms", "Review medication adherence", "Arrange urgent assessment", "Safety-net emergency symptoms"],
+          feedback: "Safe direction: urgency is appropriate while still checking end-organ symptoms."
+        },
+        {
+          id: "routine-refill",
+          label: "Routine refill only",
+          safe: false,
+          summary: "Provide routine medication refill only.",
+          checklist: ["Restart tablets"],
+          feedback: "Incomplete: severe BP needs urgent risk assessment and explicit emergency red flags."
+        }
+      ],
       safetyNet: ["new chest pain", "confusion", "weakness", "visual loss"],
       synonyms: {
         "vision changes": ["blur", "blurry", "blurred", "double vision", "eyes", "eyesight", "sight", "seeing", "vision"],
@@ -213,7 +433,62 @@ export const medicalCasePack: MedicalScenario[] = [
         "smoking history": "I used to smoke for years, but I quit about ten years ago."
       },
       examFindings: ["Mild bilateral ankle edema.", "Fine bibasal crackles."],
+      examOptions: [
+        {
+          id: "leg-edema",
+          label: "Check legs for edema",
+          finding: "Mild bilateral ankle edema.",
+          interpretation: "Supports fluid overload in context."
+        },
+        {
+          id: "chest-auscultation",
+          label: "Chest auscultation",
+          finding: "Fine bibasal crackles.",
+          interpretation: "Supports possible heart failure or pulmonary congestion."
+        }
+      ],
       testResults: ["Chest X-ray report: mild pulmonary vascular congestion.", "BNP elevated."],
+      testOptions: [
+        {
+          id: "chest-xray",
+          label: "Chest X-ray",
+          result: "Mild pulmonary vascular congestion.",
+          interpretation: "Supports congestion as a cause of night breathlessness.",
+          riskImpact: "high"
+        },
+        {
+          id: "bnp",
+          label: "BNP",
+          result: "Elevated.",
+          interpretation: "Supports possible heart failure in this scenario.",
+          riskImpact: "high"
+        },
+        {
+          id: "oxygen-saturation",
+          label: "Repeat oxygen saturation",
+          result: "SpO2 remains 94% at rest.",
+          interpretation: "Borderline oxygenation supports careful escalation and follow-up.",
+          riskImpact: "high"
+        }
+      ],
+      planOptions: [
+        {
+          id: "urgent-hf-workup",
+          label: "Urgent heart failure workup",
+          safe: true,
+          summary: "Arrange urgent heart failure assessment, review oxygenation, consider diuretic pathway per local protocol, and safety-net worsening breathlessness or chest pain.",
+          checklist: ["Assess severity", "Arrange urgent HF workup", "Review oxygenation", "Explain red flags", "Plan close follow-up"],
+          feedback: "Safe direction: symptoms and results need urgent structured assessment rather than routine reassurance."
+        },
+        {
+          id: "routine-inhaler",
+          label: "Routine inhaler trial only",
+          safe: false,
+          summary: "Try a routine inhaler and follow up later.",
+          checklist: ["Trial inhaler"],
+          feedback: "Unsafe/incomplete: orthopnea, edema, crackles, and elevated BNP need heart failure assessment."
+        }
+      ],
       safetyNet: ["worsening breathlessness", "chest pain", "fainting", "blue lips"],
       synonyms: {
         orthopnea: ["pillows", "propped up", "flat", "lying down", "sleep", "upright"],

@@ -21,11 +21,17 @@ import {
 import { medicalCasePack } from "@caseroom/case-packs-medical-osce";
 import {
   buildDebriefHighlights,
+  choosePlanOption,
   createSession,
+  documentSafetyNet,
   formatPercent,
+  orderDiagnosticTest,
+  performExam,
   revealTopic,
   type ActionKind,
+  type DiagnosticTestOption,
   type EncounterSession,
+  type ExamOption,
   type MedicalScenario
 } from "@caseroom/simulation-core";
 import {
@@ -133,12 +139,23 @@ type ClinicalFinding = {
   detail: string;
 };
 
+type DecisionLog = EncounterSession["decisionLog"];
+
+type OverlayChoice = {
+  id: string;
+  label: string;
+  detail: string;
+  selected: boolean;
+  safe?: boolean;
+};
+
 type ActionOverlay = {
   kind: Exclude<ActionKind, "history">;
   title: string;
   eyebrow: string;
   summary: string;
   items: string[];
+  choices: OverlayChoice[];
   primaryLabel: string;
   statusLabel: string;
   nextStep: string;
@@ -164,19 +181,69 @@ function formatDifficulty(difficulty: MedicalScenario["difficulty"]): string {
   return difficulty === "easy" ? "Guided" : difficulty === "medium" ? "Focused" : "High stakes";
 }
 
+function getDecisionLog(session: EncounterSession): DecisionLog {
+  return session.decisionLog ?? {
+    examIds: [],
+    testIds: [],
+    planOptionId: null,
+    safetyNetDocumented: false
+  };
+}
+
+function getExamOptions(scenario: MedicalScenario): ExamOption[] {
+  return scenario.hiddenCase.examOptions ?? scenario.hiddenCase.examFindings.map((finding, index) => ({
+    id: `exam-${index}`,
+    label: finding,
+    finding
+  }));
+}
+
+function getTestOptions(scenario: MedicalScenario): DiagnosticTestOption[] {
+  return scenario.hiddenCase.testOptions ?? scenario.hiddenCase.testResults.map((result, index) => ({
+    id: `test-${index}`,
+    label: result,
+    result
+  }));
+}
+
+function getPlanOptions(scenario: MedicalScenario) {
+  return scenario.hiddenCase.planOptions ?? [
+    {
+      id: "document-plan",
+      label: "Document safe management plan",
+      safe: true,
+      summary: `Document management for ${scenario.hiddenCase.diagnosis}.`,
+      checklist: ["Address immediate risk", "Explain follow-up", "Give safety-net advice"],
+      feedback: "Use the case findings and missing history gaps to make this plan specific."
+    }
+  ];
+}
+
 function buildClinicalFindings(session: EncounterSession): ClinicalFinding[] {
   const findings: ClinicalFinding[] = [];
+  const decisionLog = getDecisionLog(session);
+  const examOptions = getExamOptions(session.scenario);
+  const testOptions = getTestOptions(session.scenario);
 
-  if (session.examPerformed) {
+  for (const examId of decisionLog.examIds) {
+    const exam = examOptions.find((option) => option.id === examId);
+    if (!exam) {
+      continue;
+    }
     findings.push({
-      title: "Exam",
-      detail: session.scenario.hiddenCase.examFindings.join(" ")
+      title: exam.label,
+      detail: exam.finding
     });
   }
-  if (session.testsOrdered > 0) {
+
+  for (const testId of decisionLog.testIds) {
+    const test = testOptions.find((option) => option.id === testId);
+    if (!test) {
+      continue;
+    }
     findings.push({
-      title: "Results",
-      detail: session.scenario.hiddenCase.testResults.join(" ")
+      title: test.label,
+      detail: test.result
     });
   }
   if (session.diagnosisText) {
@@ -196,16 +263,28 @@ function buildClinicalFindings(session: EncounterSession): ClinicalFinding[] {
 }
 
 function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind, "history">): ActionOverlay {
+  const decisionLog = getDecisionLog(session);
+
   if (kind === "examine") {
     const missingTopics = session.progress.missingCriticalTopics.slice(0, 2);
+    const examOptions = getExamOptions(session.scenario);
+    const selectedExams = examOptions.filter((option) => decisionLog.examIds.includes(option.id));
     return {
       kind,
       eyebrow: "Bedside exam",
-      title: "Focused examination",
-      summary: "Exam findings are now in the chart. They support risk assessment, but they do not replace focused history.",
-      items: session.scenario.hiddenCase.examFindings,
+      title: selectedExams.length > 0 ? "Exam findings documented" : "Choose bedside examination",
+      summary: selectedExams.length > 0
+        ? "Selected exam findings are now in the chart and contribute to risk assessment."
+        : "Choose the exam you want to perform. Findings appear only after you select an examination.",
+      items: selectedExams.map((option) => `${option.finding}${option.interpretation ? ` ${option.interpretation}` : ""}`),
+      choices: examOptions.map((option) => ({
+        id: option.id,
+        label: option.label,
+        detail: decisionLog.examIds.includes(option.id) ? option.finding : "Perform this exam",
+        selected: decisionLog.examIds.includes(option.id)
+      })),
       primaryLabel: "Return to room",
-      statusLabel: "Exam documented",
+      statusLabel: selectedExams.length > 0 ? "Exam documented" : "Exam not started",
       nextStep: missingTopics.length > 0
         ? `Clarify next: ${missingTopics.join(", ")}.`
         : "Move to tests or commit an impression."
@@ -214,15 +293,27 @@ function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind,
 
   if (kind === "order_test") {
     const shouldEscalate = session.progress.needsUrgentEscalation;
+    const testOptions = getTestOptions(session.scenario);
+    const selectedTests = testOptions.filter((option) => decisionLog.testIds.includes(option.id));
     return {
       kind,
-      eyebrow: "Results",
-      title: "Tests reviewed",
-      summary: "Results are available for interpretation. Use them to support, challenge, or escalate your working impression.",
-      items: session.scenario.hiddenCase.testResults,
+      eyebrow: "Diagnostics",
+      title: selectedTests.length > 0 ? "Ordered test results" : "Available tests",
+      summary: selectedTests.length > 0
+        ? "These are the tests you ordered. Use the findings to choose the safest next clinical move."
+        : "Order a test before results appear. The room will update when new evidence is available.",
+      items: selectedTests.map((option) => `${option.result}${option.interpretation ? ` ${option.interpretation}` : ""}`),
+      choices: testOptions.map((option) => ({
+        id: option.id,
+        label: option.label,
+        detail: decisionLog.testIds.includes(option.id) ? option.result : "Order test",
+        selected: decisionLog.testIds.includes(option.id)
+      })),
       primaryLabel: "Continue consult",
-      statusLabel: "Results available",
-      nextStep: shouldEscalate
+      statusLabel: selectedTests.length > 0 ? "Results available" : "No tests ordered",
+      nextStep: selectedTests.length === 0
+        ? "Choose a diagnostic test if the history supports it."
+        : shouldEscalate
         ? "Risk is now high enough to explain urgent escalation."
         : "If the history is complete, commit an impression."
     };
@@ -238,6 +329,7 @@ function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind,
       items: missingTopics.length > 0
         ? missingTopics.map((topic) => `Still clarify: ${topic}`)
         : ["Key critical topics have been addressed."],
+      choices: [],
       primaryLabel: "Use in plan",
       statusLabel: missingTopics.length > 0 ? "Provisional" : "Ready for plan",
       nextStep: missingTopics.length > 0
@@ -248,16 +340,37 @@ function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind,
 
   if (kind === "treatment_plan") {
     const hasMissingCriticalTopics = session.progress.missingCriticalTopics.length > 0;
+    const planOptions = getPlanOptions(session.scenario);
+    const selectedPlan = planOptions.find((option) => option.id === decisionLog.planOptionId);
     return {
       kind,
       eyebrow: "Plan",
-      title: "Management plan",
-      summary: session.planText ?? "Plan not documented yet.",
-      items: session.progress.escalationReasons.length > 0
-        ? session.progress.escalationReasons
-        : ["No immediate escalation triggers are documented from the visible state."],
+      title: selectedPlan ? "Management direction selected" : "Choose management direction",
+      summary: selectedPlan
+        ? selectedPlan.summary
+        : "Choose a management direction. The simulator will judge whether the choice fits the case evidence.",
+      items: selectedPlan
+        ? selectedPlan.checklist
+        : session.progress.escalationReasons.length > 0
+          ? session.progress.escalationReasons
+          : ["No immediate escalation triggers are documented from the visible state."],
+      choices: planOptions.map((option) => ({
+        id: option.id,
+        label: option.label,
+        detail: decisionLog.planOptionId === option.id ? option.feedback ?? option.summary : "Select pathway",
+        selected: decisionLog.planOptionId === option.id,
+        safe: option.safe
+      })),
       primaryLabel: "Back to patient",
-      statusLabel: session.progress.needsUrgentEscalation ? "Urgent plan" : "Plan documented",
+      statusLabel: selectedPlan
+        ? selectedPlan.safe
+          ? hasMissingCriticalTopics
+            ? "Safe path · history incomplete"
+            : "Safe path selected"
+          : "Unsafe path selected"
+        : hasMissingCriticalTopics
+          ? "Plan ready · history incomplete"
+          : "Ready for plan",
       nextStep: hasMissingCriticalTopics
         ? "Before finishing, close the remaining history gaps or acknowledge uncertainty."
         : "Add explicit return precautions before ending."
@@ -268,10 +381,18 @@ function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind,
     kind,
     eyebrow: "Safety net",
     title: "Return precautions",
-    summary: session.planText ?? "Safety-net advice has been added to the plan.",
+    summary: decisionLog.safetyNetDocumented
+      ? "Safety-net advice is documented in the plan."
+      : "Document return precautions before ending the encounter.",
     items: session.scenario.hiddenCase.safetyNet,
+    choices: session.scenario.hiddenCase.safetyNet.map((item) => ({
+      id: item,
+      label: item,
+      detail: decisionLog.safetyNetDocumented ? "Covered in safety-net advice" : "Will be included when documented",
+      selected: decisionLog.safetyNetDocumented
+    })),
     primaryLabel: "Finish advice",
-    statusLabel: "Safety net added",
+    statusLabel: decisionLog.safetyNetDocumented ? "Safety net added" : "Safety net pending",
     nextStep: "If diagnosis and plan are documented, end the encounter for debrief."
   };
 }
@@ -283,10 +404,10 @@ function getActionStatus(session: EncounterSession, kind: ActionKind): ActionSta
       : { state: "needs", label: `${session.progress.missingCriticalTopics.length} gaps` };
   }
   if (kind === "examine") {
-    return session.examPerformed ? { state: "done", label: "done" } : { state: "ready", label: "ready" };
+    return getDecisionLog(session).examIds.length > 0 ? { state: "done", label: "done" } : { state: "ready", label: "ready" };
   }
   if (kind === "order_test") {
-    return session.testsOrdered > 0 ? { state: "done", label: "reviewed" } : { state: "ready", label: "ready" };
+    return getDecisionLog(session).testIds.length > 0 ? { state: "done", label: "ordered" } : { state: "ready", label: "ready" };
   }
   if (kind === "diagnose") {
     if (session.diagnosisText && !session.diagnosisText.toLowerCase().includes("more history")) {
@@ -297,9 +418,9 @@ function getActionStatus(session: EncounterSession, kind: ActionKind): ActionSta
       : { state: "ready", label: "ready" };
   }
   if (kind === "treatment_plan") {
-    return session.planText ? { state: "done", label: "set" } : { state: "ready", label: "ready" };
+    return getDecisionLog(session).planOptionId ? { state: "done", label: "set" } : { state: "ready", label: "ready" };
   }
-  return session.planText?.includes("Safety-net advice covered")
+  return getDecisionLog(session).safetyNetDocumented
     ? { state: "done", label: "given" }
     : { state: "ready", label: "ready" };
 }
@@ -708,9 +829,43 @@ export function App() {
       toggleVoiceCapture();
       return;
     }
-    const response = await generatePatientTurn(session, "", kind);
-    setSession(response.session);
-    setActiveActionOverlay(buildActionOverlay(response.session, kind));
+    setActiveActionOverlay(buildActionOverlay(session, kind));
+  }
+
+  function selectExam(examId: string) {
+    if (!session) {
+      return;
+    }
+    const nextSession = performExam(session, examId);
+    setSession(nextSession);
+    setActiveActionOverlay(buildActionOverlay(nextSession, "examine"));
+  }
+
+  function selectTest(testId: string) {
+    if (!session) {
+      return;
+    }
+    const nextSession = orderDiagnosticTest(session, testId);
+    setSession(nextSession);
+    setActiveActionOverlay(buildActionOverlay(nextSession, "order_test"));
+  }
+
+  function selectPlan(planOptionId: string) {
+    if (!session) {
+      return;
+    }
+    const nextSession = choosePlanOption(session, planOptionId);
+    setSession(nextSession);
+    setActiveActionOverlay(buildActionOverlay(nextSession, "treatment_plan"));
+  }
+
+  function documentSafety() {
+    if (!session) {
+      return;
+    }
+    const nextSession = documentSafetyNet(session);
+    setSession(nextSession);
+    setActiveActionOverlay(buildActionOverlay(nextSession, "safety_net"));
   }
 
   function handleManuallyRevealTopic(topic: string) {
@@ -1447,24 +1602,62 @@ export function App() {
                       ) : null}
                     </div>
                     <p>{activeActionOverlay.summary}</p>
-                    <ul className="overlay-findings">
-                      {activeActionOverlay.kind === "diagnose" && session && session.progress.missingCriticalTopics.length > 0 ? (
-                        session.progress.missingCriticalTopics.map((topic) => (
-                          <li
-                            key={topic}
-                            className="clickable-gap-item"
-                            onClick={() => handleManuallyRevealTopic(topic)}
+
+                    {activeActionOverlay.choices.length > 0 ? (
+                      <div className="overlay-choice-grid">
+                        {activeActionOverlay.choices.map((choice) => (
+                          <button
+                            key={choice.id}
+                            className={`overlay-choice-card ${choice.selected ? "selected" : ""} ${
+                              choice.safe === false ? "unsafe" : choice.safe === true ? "safe" : ""
+                            }`}
+                            onClick={() => {
+                              if (activeActionOverlay.kind === "examine") {
+                                selectExam(choice.id);
+                              } else if (activeActionOverlay.kind === "order_test") {
+                                selectTest(choice.id);
+                              } else if (activeActionOverlay.kind === "treatment_plan") {
+                                selectPlan(choice.id);
+                              }
+                            }}
+                            type="button"
                           >
-                            <span>Still clarify: {topic}</span>
-                            <small className="force-done-badge">Click to mark as covered</small>
-                          </li>
-                        ))
-                      ) : (
-                        activeActionOverlay.items.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))
-                      )}
-                    </ul>
+                            <span>{choice.label}</span>
+                            <small>{choice.detail}</small>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {activeActionOverlay.items.length > 0 ? (
+                      <ul className="overlay-findings">
+                        {activeActionOverlay.kind === "diagnose" && session && session.progress.missingCriticalTopics.length > 0 ? (
+                          session.progress.missingCriticalTopics.map((topic) => (
+                            <li
+                              key={topic}
+                              className="clickable-gap-item"
+                              onClick={() => handleManuallyRevealTopic(topic)}
+                            >
+                              <span>Still clarify: {topic}</span>
+                              <small className="force-done-badge">Click to mark as covered</small>
+                            </li>
+                          ))
+                        ) : (
+                          activeActionOverlay.items.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))
+                        )}
+                      </ul>
+                    ) : null}
+
+                    {activeActionOverlay.kind === "safety_net" && !getDecisionLog(session).safetyNetDocumented ? (
+                      <div className="action-row">
+                        <button className="secondary-button" onClick={documentSafety} type="button">
+                          Document safety advice
+                        </button>
+                      </div>
+                    ) : null}
+
                     <div className="overlay-next-step">
                       <span>Recommended next move</span>
                       <strong>{activeActionOverlay.nextStep}</strong>
