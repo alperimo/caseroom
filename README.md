@@ -2,6 +2,8 @@
 
 CaseRoom is a local-first, voice-first clinical simulation room for high-stakes medical training. Learners enter a 2.5D consultation room and speak with a synthetic patient grounded in local case data, then use in-room exam, tests, impression, plan, and safety-net tools to complete the encounter. Each session ends with a rubric-based debrief and source-backed local citations.
 
+<img width="1727" height="916" alt="image" src="https://github.com/user-attachments/assets/7dcbb4fa-397a-4f54-9731-779378b61c1f" />
+
 ## Current scope
 
 - Medical vertical only
@@ -12,6 +14,10 @@ CaseRoom is a local-first, voice-first clinical simulation room for high-stakes 
 - Voice-first interaction: mic input via local QVAC Whisper ASR when the bridge is running, spoken patient replies via local QVAC TTS, and browser voice fallbacks
 - Persistent local embeddings workspace for bundled medical guidance and citation retrieval
 - Local SQLite session persistence for completed encounters inside the Electron shell
+
+<img width="1725" height="913" alt="image" src="https://github.com/user-attachments/assets/f0230e46-e9ef-4b63-a4fd-c9cc96904439" />
+<img width="1727" height="913" alt="image" src="https://github.com/user-attachments/assets/c9c8bd23-08cc-4446-9b06-8f9f6c1b804c" />
+
 
 ## Run locally
 
