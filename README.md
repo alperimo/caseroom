@@ -144,6 +144,7 @@ npm run evidence:bundle
 - QVAC health snapshot when the bridge is running
 - typecheck, lint, test, build logs
 - git status and diff-stat logs
+- structured performance logs under `performance/` after at least one standard encounter
 - remote API transparency metadata
 - a manifest listing manual artifacts still needed for external review
 
@@ -152,7 +153,7 @@ Manual evidence artifacts still required:
 - short demo video showing a full local encounter
 - hardware proof screenshot/video showing the local machine running the app
 - exported debrief markdown from `Save report`
-- QVAC bridge logs and `.artifacts/performance/inference-events.jsonl` showing model load, inference timing, ASR/TTS, and RAG events
+- QVAC bridge logs and `.artifacts/submission/performance/inference-events.jsonl` showing model load, inference timing, ASR/TTS, and RAG events
 
 ## Repo structure
 

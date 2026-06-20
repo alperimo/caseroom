@@ -1,0 +1,16 @@
+{
+  "version": "medical-osce-v1",
+  "documentIds": [
+    "ed-chest-001-guide",
+    "ed-chest-001-rubric",
+    "gp-fatigue-001-guide",
+    "gp-fatigue-001-rubric",
+    "gp-uti-001-guide",
+    "gp-uti-001-rubric",
+    "im-bp-001-guide",
+    "im-bp-001-rubric",
+    "resp-sob-001-guide",
+    "resp-sob-001-rubric"
+  ],
+  "savedAt": "2026-06-20T09:49:36.121Z"
+}

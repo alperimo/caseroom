@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   GTE_LARGE_FP16,
   LLAMA_3_2_1B_INST_Q4_0,
@@ -25,15 +26,17 @@ import {
 } from "@qvac/sdk";
 import { bundledRagDocuments, ragWorkspaceVersion } from "./rag-documents.mjs";
 
+const packageDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(packageDir, "../..");
 const port = Number(process.env.CASE_ROOM_QVAC_PORT ?? 4545);
 const requestedModel = process.env.CASE_ROOM_QVAC_MODEL ?? "LLAMA_3_2_1B_INST_Q4_0";
 const requestedModelPath = process.env.CASE_ROOM_QVAC_MODEL_PATH;
 const requestedAsrModel = process.env.CASE_ROOM_QVAC_ASR_MODEL ?? "WHISPER_EN_BASE_Q8_0";
 const strictQvacMode = process.env.CASE_ROOM_STRICT_QVAC === "1";
 const ragWorkspace = "caseroom-medical-osce";
-const ragManifestDir = path.resolve(process.cwd(), ".caseroom", "rag");
+const ragManifestDir = path.resolve(repoRoot, ".caseroom", "rag");
 const ragManifestPath = path.join(ragManifestDir, `${ragWorkspace}.json`);
-const performanceLogDir = path.resolve(process.cwd(), ".artifacts", "performance");
+const performanceLogDir = path.resolve(repoRoot, ".artifacts", "performance");
 const performanceLogPath = path.join(performanceLogDir, "inference-events.jsonl");
 
 const supportedModels = {
