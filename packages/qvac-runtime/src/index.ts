@@ -180,7 +180,7 @@ function isEnglishVoice(voice: SpeechSynthesisVoice): boolean {
   return voice.lang.toLowerCase().startsWith("en");
 }
 
-function rankVoice(voice: SpeechSynthesisVoice): number {
+function rankVoice(voice: SpeechSynthesisVoice, genderPreference: "female" | "male" | null = null): number {
   const name = voice.name.toLowerCase();
   let score = 0;
 
@@ -199,16 +199,45 @@ function rankVoice(voice: SpeechSynthesisVoice): number {
     name.includes("samantha") ||
     name.includes("ava") ||
     name.includes("allison") ||
+    name.includes("victoria") ||
+    name.includes("karen") ||
     name.includes("premium") ||
     name.includes("natural")
   ) {
     score += 2;
   }
+  if (
+    genderPreference === "male" &&
+    (
+      name.includes("alex") ||
+      name.includes("daniel") ||
+      name.includes("fred") ||
+      name.includes("tom") ||
+      name.includes("aaron") ||
+      name.includes("arthur") ||
+      name.includes("oliver")
+    )
+  ) {
+    score += 5;
+  }
+  if (
+    genderPreference === "female" &&
+    (
+      name.includes("samantha") ||
+      name.includes("ava") ||
+      name.includes("allison") ||
+      name.includes("victoria") ||
+      name.includes("karen") ||
+      name.includes("serena")
+    )
+  ) {
+    score += 5;
+  }
 
   return score;
 }
 
-async function resolvePreferredVoice(): Promise<SpeechSynthesisVoice | null> {
+async function resolvePreferredVoice(genderPreference: "female" | "male" | null = null): Promise<SpeechSynthesisVoice | null> {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
     return null;
   }
@@ -216,7 +245,7 @@ async function resolvePreferredVoice(): Promise<SpeechSynthesisVoice | null> {
   const voices = window.speechSynthesis.getVoices();
   const englishVoices = voices.filter(isEnglishVoice);
   if (englishVoices.length > 0) {
-    return englishVoices.sort((left, right) => rankVoice(right) - rankVoice(left))[0] ?? null;
+    return englishVoices.sort((left, right) => rankVoice(right, genderPreference) - rankVoice(left, genderPreference))[0] ?? null;
   }
 
   await new Promise<void>((resolve) => {
@@ -241,7 +270,7 @@ async function resolvePreferredVoice(): Promise<SpeechSynthesisVoice | null> {
   });
 
   const refreshedEnglishVoices = window.speechSynthesis.getVoices().filter(isEnglishVoice);
-  return refreshedEnglishVoices.sort((left, right) => rankVoice(right) - rankVoice(left))[0] ?? null;
+  return refreshedEnglishVoices.sort((left, right) => rankVoice(right, genderPreference) - rankVoice(left, genderPreference))[0] ?? null;
 }
 
 function describeVoiceMode(support: VoiceRuntimeSupport): string {
@@ -694,13 +723,13 @@ export function cancelSpeech(): void {
   }
 }
 
-async function speakWithQvacTts(text: string): Promise<void> {
+async function speakWithQvacTts(text: string, voice?: PatientTtsVoice): Promise<void> {
   const response = await fetch(`${resolveRuntimeUrl()}/tts`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ text })
+    body: JSON.stringify({ text, voice })
   });
 
   if (!response.ok) {
@@ -1034,7 +1063,16 @@ export function startVoiceCapture(options: VoiceCaptureOptions): VoiceCaptureCon
   return startQvacVoiceCapture(options) ?? (isStrictQvacMode() ? null : startWebSpeechCapture(options));
 }
 
-export async function speakText(text: string): Promise<void> {
+export type PatientTtsVoice = "F1" | "F2" | "M1" | "M2";
+
+function getVoiceGenderPreference(voice?: PatientTtsVoice): "female" | "male" | null {
+  if (!voice) {
+    return null;
+  }
+  return voice.startsWith("M") ? "male" : "female";
+}
+
+export async function speakText(text: string, voice?: PatientTtsVoice): Promise<void> {
   if (typeof window === "undefined") {
     return;
   }
@@ -1047,7 +1085,7 @@ export async function speakText(text: string): Promise<void> {
   cancelSpeech();
 
   try {
-    await speakWithQvacTts(cleanText);
+    await speakWithQvacTts(cleanText, voice);
     return;
   } catch {
     if (isStrictQvacMode()) {
@@ -1060,7 +1098,7 @@ export async function speakText(text: string): Promise<void> {
     return;
   }
 
-  const preferredVoice = await resolvePreferredVoice();
+  const preferredVoice = await resolvePreferredVoice(getVoiceGenderPreference(voice));
 
   await new Promise<void>((resolve, reject) => {
     const utterance = new window.SpeechSynthesisUtterance(cleanText);

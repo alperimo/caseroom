@@ -637,7 +637,7 @@ export function App() {
     }
 
     initialSpokenSessionIdRef.current = session.id;
-    void speakText(openingTurn.text).catch((error: unknown) => {
+    void speakText(openingTurn.text, session.scenario.brief.ttsVoice).catch((error: unknown) => {
       setVoiceError(error instanceof Error ? error.message : String(error));
     });
   }, [screen, session]);
@@ -712,7 +712,7 @@ export function App() {
     initialSpokenSessionIdRef.current = nextSession.id;
     voiceControllerRef.current?.cancel();
     voiceControllerRef.current = null;
-    void speakText(openingTurn.text).catch((error: unknown) => {
+    void speakText(openingTurn.text, nextSession.scenario.brief.ttsVoice).catch((error: unknown) => {
       setVoiceError(error instanceof Error ? error.message : String(error));
     });
   }
@@ -798,7 +798,7 @@ export function App() {
       try {
         voiceControllerRef.current?.cancel();
         voiceControllerRef.current = null;
-        await speakText(latestTurn.text);
+        await speakText(latestTurn.text, response.session.scenario.brief.ttsVoice);
       } catch (error) {
         setVoiceError(error instanceof Error ? error.message : String(error));
       }

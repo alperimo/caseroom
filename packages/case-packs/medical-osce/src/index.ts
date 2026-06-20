@@ -8,6 +8,8 @@ export const medicalCasePack: MedicalScenario[] = [
     difficulty: "easy",
     brief: {
       patientName: "Linda Miller",
+      patientGender: "female",
+      ttsVoice: "F1",
       age: 29,
       chiefComplaint: "It burns when I pee and I am going every 20 minutes.",
       visibleVitals: { hr: 82, bp: "118/72", rr: 14, spo2: 99, temp: 37.1 },
@@ -123,6 +125,8 @@ export const medicalCasePack: MedicalScenario[] = [
     difficulty: "hard",
     brief: {
       patientName: "David Clarke",
+      patientGender: "male",
+      ttsVoice: "M1",
       age: 58,
       chiefComplaint: "I got a heavy pain in my chest after climbing the stairs and it scared me.",
       visibleVitals: { hr: 102, bp: "154/92", rr: 20, spo2: 97, temp: 36.9 },
@@ -259,6 +263,8 @@ export const medicalCasePack: MedicalScenario[] = [
     difficulty: "medium",
     brief: {
       patientName: "Maya Hassan",
+      patientGender: "female",
+      ttsVoice: "F1",
       age: 34,
       chiefComplaint: "I am exhausted all the time and my periods have become really heavy.",
       visibleVitals: { hr: 88, bp: "110/68", rr: 14, spo2: 100, temp: 36.7 },
@@ -381,6 +387,8 @@ export const medicalCasePack: MedicalScenario[] = [
     difficulty: "medium",
     brief: {
       patientName: "Elaine Foster",
+      patientGender: "female",
+      ttsVoice: "F2",
       age: 52,
       chiefComplaint: "I have had a pounding headache and my blood pressure readings at home have been very high.",
       visibleVitals: { hr: 92, bp: "186/108", rr: 16, spo2: 98, temp: 36.8 },
@@ -496,6 +504,8 @@ export const medicalCasePack: MedicalScenario[] = [
     difficulty: "hard",
     brief: {
       patientName: "Carlos Mendez",
+      patientGender: "male",
+      ttsVoice: "M1",
       age: 67,
       chiefComplaint: "I keep waking up at night short of breath and needing to sit upright.",
       visibleVitals: { hr: 96, bp: "148/86", rr: 22, spo2: 94, temp: 36.6 },

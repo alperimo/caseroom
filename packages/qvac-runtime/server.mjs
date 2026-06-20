@@ -58,11 +58,11 @@ let activeAsrModelName = supportedAsrModels[requestedAsrModel] ? requestedAsrMod
 
 let modelId = null;
 let embeddingModelId = null;
-let ttsModelId = null;
+const ttsModelIds = new Map();
 let asrModelId = null;
 let modelLoadPromise = null;
 let embeddingLoadPromise = null;
-let ttsLoadPromise = null;
+const ttsLoadPromises = new Map();
 let asrLoadPromise = null;
 let ragSearchQueue = Promise.resolve();
 let asrQueue = Promise.resolve();
@@ -107,7 +107,7 @@ async function closeHttpServer() {
   });
 }
 
-async function unloadTrackedModel({ id, modelName, modelType, clear }) {
+async function unloadTrackedModel({ id, modelName, modelType, clear, extra = {} }) {
   if (!id) {
     return;
   }
@@ -120,6 +120,7 @@ async function unloadTrackedModel({ id, modelName, modelType, clear }) {
       modelName,
       modelType,
       modelId: id,
+      ...extra,
       durationMs: Math.round(performance.now() - startedAt)
     });
     clear();
@@ -130,6 +131,7 @@ async function unloadTrackedModel({ id, modelName, modelType, clear }) {
       modelName,
       modelType,
       modelId: id,
+      ...extra,
       durationMs: Math.round(performance.now() - startedAt),
       error: error instanceof Error ? error.message : String(error)
     });
@@ -139,15 +141,18 @@ async function unloadTrackedModel({ id, modelName, modelType, clear }) {
 async function unloadAllTrackedModels(signal) {
   console.log(`[qvac] ${signal}; unloading tracked models before SDK transport closes...`);
 
-  await unloadTrackedModel({
-    id: ttsModelId,
-    modelName: "TTS_EN_SUPERTONIC_Q8_0",
-    modelType: "tts",
-    clear: () => {
-      ttsModelId = null;
-      ttsReady = false;
-    }
-  });
+  for (const [ttsVoice, trackedTtsModelId] of [...ttsModelIds.entries()]) {
+    await unloadTrackedModel({
+      id: trackedTtsModelId,
+      modelName: "TTS_EN_SUPERTONIC_Q8_0",
+      modelType: "tts",
+      extra: { ttsVoice },
+      clear: () => {
+        ttsModelIds.delete(ttsVoice);
+        ttsReady = ttsModelIds.size > 0;
+      }
+    });
+  }
   await unloadTrackedModel({
     id: asrModelId,
     modelName: activeAsrModelName,
@@ -411,56 +416,67 @@ async function ensureEmbeddingModelLoaded() {
   return embeddingLoadPromise;
 }
 
-async function ensureTtsModelLoaded() {
-  if (ttsModelId) {
-    return ttsModelId;
+const supportedTtsVoices = new Set(["F1", "F2", "M1", "M2"]);
+
+function normalizeTtsVoice(voice) {
+  return supportedTtsVoices.has(voice) ? voice : "F1";
+}
+
+async function ensureTtsModelLoaded(voice = "F1") {
+  const ttsVoice = normalizeTtsVoice(voice);
+  const cachedModelId = ttsModelIds.get(ttsVoice);
+  if (cachedModelId) {
+    return cachedModelId;
   }
-  if (ttsLoadPromise) {
-    return ttsLoadPromise;
+  const existingPromise = ttsLoadPromises.get(ttsVoice);
+  if (existingPromise) {
+    return existingPromise;
   }
 
-  ttsLoadPromise = (async () => {
+  const loadPromise = (async () => {
     try {
-      ttsModelId = await measured(
+      const loadedModelId = await measured(
         "model.load",
-        { modelName: "TTS_EN_SUPERTONIC_Q8_0", modelType: "tts" },
+        { modelName: "TTS_EN_SUPERTONIC_Q8_0", modelType: "tts", ttsVoice },
         () => loadModel({
           modelSrc: TTS_EN_SUPERTONIC_Q8_0,
           modelConfig: {
             ttsEngine: "supertonic",
             language: "en",
-            voice: "F1",
+            voice: ttsVoice,
             ttsSpeed: 1.03,
             ttsNumInferenceSteps: 5
           },
           onProgress: (progress) => {
-            console.log(`[qvac] loading Supertonic TTS: ${progress.percentage.toFixed(1)}%`);
+            console.log(`[qvac] loading Supertonic TTS ${ttsVoice}: ${progress.percentage.toFixed(1)}%`);
           }
         }),
       );
+      ttsModelIds.set(ttsVoice, loadedModelId);
       ttsReady = true;
       lastTtsError = null;
-      console.log(`[qvac] TTS ready (${ttsModelId})`);
-      return ttsModelId;
+      console.log(`[qvac] TTS ${ttsVoice} ready (${loadedModelId})`);
+      return loadedModelId;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const registeredMatch = message.match(/Model with ID "([^"]+)" is already registered/);
       if (registeredMatch) {
-        ttsModelId = registeredMatch[1];
+        ttsModelIds.set(ttsVoice, registeredMatch[1]);
         ttsReady = true;
         lastTtsError = null;
-        return ttsModelId;
+        return registeredMatch[1];
       }
       ttsReady = false;
       lastTtsError = message;
-      ttsModelId = null;
+      ttsModelIds.delete(ttsVoice);
       throw error;
     } finally {
-      ttsLoadPromise = null;
+      ttsLoadPromises.delete(ttsVoice);
     }
   })();
 
-  return ttsLoadPromise;
+  ttsLoadPromises.set(ttsVoice, loadPromise);
+  return loadPromise;
 }
 
 async function ensureAsrModelLoaded() {
@@ -1237,12 +1253,13 @@ const server = http.createServer(async (request, response) => {
     try {
       const body = await readJson(request);
       const text = typeof body.text === "string" ? body.text.trim() : "";
+      const ttsVoice = normalizeTtsVoice(typeof body.voice === "string" ? body.voice : "F1");
       if (!text) {
         sendJson(response, 400, { error: "Text is required." });
         return;
       }
 
-      const readyTtsModelId = await ensureTtsModelLoaded();
+      const readyTtsModelId = await ensureTtsModelLoaded(ttsVoice);
       const ttsResult = textToSpeech({
         modelId: readyTtsModelId,
         text,
@@ -1254,6 +1271,7 @@ const server = http.createServer(async (request, response) => {
         {
           modelName: "TTS_EN_SUPERTONIC_Q8_0",
           modelId: readyTtsModelId,
+          ttsVoice,
           inputTokensApprox: approximateTokens(text),
           textPreview: text.slice(0, 220)
         },
@@ -1264,6 +1282,7 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, 200, {
         ok: true,
         mode: "qvac-tts",
+        voice: ttsVoice,
         mimeType: "audio/wav",
         audioBase64: wavBuffer.toString("base64")
       });

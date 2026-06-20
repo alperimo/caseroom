@@ -58,6 +58,8 @@ export type MedicalScenario = {
   difficulty: Difficulty;
   brief: {
     patientName: string;
+    patientGender?: "female" | "male";
+    ttsVoice?: "F1" | "F2" | "M1" | "M2";
     age: number;
     chiefComplaint: string;
     timerMinutes?: number;

@@ -48,13 +48,13 @@ npm run evidence:bundle
 - The `packages/qvac-runtime` package now contains both the browser-safe adapter and a Node-side QVAC bridge process. The bridge uses `@qvac/sdk` for patient text completion.
 - When the bridge is reachable but the patient model is still cold, the app now requests a background warmup so the first encounter turn is less likely to stall.
 - The bridge also provisions a persistent local RAG workspace using QVAC embeddings and workspace storage. Debrief citations fall back to bundled static citations if the local RAG workspace is unavailable.
-- Voice output now tries QVAC Supertonic TTS through the local bridge first. If the bridge is unavailable, TTS model loading fails, or browser audio playback is blocked, the app falls back to the best available local English browser/OS voice.
-- Voice input now records local microphone audio with `MediaRecorder` and sends it to the local bridge `POST /asr`, backed by `WHISPER_EN_TINY_Q8_0` and Silero VAD. If local recording is unavailable, the app falls back to browser Web Speech configured for English.
+- Voice output now tries QVAC Supertonic TTS through the local bridge first, selecting authored patient voice IDs such as `F1`, `F2`, or `M1` from the case data. If the bridge is unavailable, TTS model loading fails, or browser audio playback is blocked, the app falls back to the best available local English browser/OS voice.
+- Voice input now records local microphone audio with `MediaRecorder` and sends it to the local bridge `POST /asr`, backed by `WHISPER_EN_BASE_Q8_0` and Silero VAD by default. If local recording is unavailable, the app falls back to browser Web Speech configured for English.
 - No cloud services are required for the current demo path.
 
 ## Voice quality notes
 
-CaseRoom currently tries local QVAC Supertonic TTS first. The bridge endpoint is `POST /tts` and returns WAV audio generated on-device through `TTS_EN_SUPERTONIC_Q8_0`.
+CaseRoom currently tries local QVAC Supertonic TTS first. The bridge endpoint is `POST /tts` and returns WAV audio generated on-device through `TTS_EN_SUPERTONIC_Q8_0`. Cases can request a specific Supertonic voice ID (`F1`, `F2`, `M1`, or `M2`) so patient audio matches the authored persona.
 
 If QVAC TTS is unavailable, CaseRoom falls back to the best available local English browser/OS voice. For better free fallback quality on macOS, install higher-quality English voices in `System Settings > Accessibility > Spoken Content > System Voice > Manage Voices...`, then restart the browser or Electron app. Recommended local voices to try first are `Samantha`, `Ava`, `Allison`, or any English `Premium` / `Enhanced` voice available on the machine.
 
