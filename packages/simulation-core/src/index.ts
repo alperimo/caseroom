@@ -44,6 +44,13 @@ export type PlanOption = {
   feedback?: string;
 };
 
+export type DiagnosisOption = {
+  id: string;
+  label: string;
+  correct: boolean;
+  feedback?: string;
+};
+
 export type MedicalScenario = {
   id: string;
   title: string;
@@ -69,6 +76,7 @@ export type MedicalScenario = {
     mustAsk: string[];
     redFlags: string[];
     truthTable: Record<string, string>;
+    diagnosisOptions?: DiagnosisOption[];
     examFindings: string[];
     examOptions?: ExamOption[];
     testResults: string[];

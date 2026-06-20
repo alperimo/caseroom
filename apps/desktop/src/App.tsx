@@ -30,6 +30,7 @@ import {
   revealTopic,
   setDiagnosis,
   type ActionKind,
+  type DiagnosisOption,
   type DiagnosticTestOption,
   type EncounterSession,
   type ExamOption,
@@ -220,6 +221,23 @@ function getPlanOptions(scenario: MedicalScenario) {
   ];
 }
 
+function getDiagnosisOptions(scenario: MedicalScenario): DiagnosisOption[] {
+  return scenario.hiddenCase.diagnosisOptions ?? [
+    {
+      id: "case-diagnosis",
+      label: scenario.hiddenCase.diagnosis,
+      correct: true,
+      feedback: "Best working diagnosis for the authored case."
+    },
+    {
+      id: "defer-diagnosis",
+      label: "More history needed before diagnosis",
+      correct: false,
+      feedback: "Use if the evidence is not enough yet."
+    }
+  ];
+}
+
 function buildClinicalFindings(session: EncounterSession): ClinicalFinding[] {
   const findings: ClinicalFinding[] = [];
   const decisionLog = getDecisionLog(session);
@@ -322,6 +340,7 @@ function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind,
 
   if (kind === "diagnose") {
     const missingTopics = session.progress.missingCriticalTopics;
+    const diagnosisOptions = getDiagnosisOptions(session.scenario);
     return {
       kind,
       eyebrow: "Clinical impression",
@@ -330,25 +349,15 @@ function buildActionOverlay(session: EncounterSession, kind: Exclude<ActionKind,
       items: missingTopics.length > 0
         ? missingTopics.map((topic) => `Still clarify: ${topic}`)
         : ["Key critical topics have been addressed."],
-      choices: [
-        {
-          id: "case-diagnosis",
-          label: session.scenario.hiddenCase.diagnosis,
-          detail: session.diagnosisText === session.scenario.hiddenCase.diagnosis
-            ? "Selected working diagnosis"
-            : "Commit this working diagnosis",
-          selected: session.diagnosisText === session.scenario.hiddenCase.diagnosis,
-          safe: true
-        },
-        {
-          id: "defer-diagnosis",
-          label: "More history needed before diagnosis",
-          detail: session.diagnosisText === "More history needed before diagnosis"
-            ? "Selected defer state"
-            : "Use if the evidence is not enough yet",
-          selected: session.diagnosisText === "More history needed before diagnosis"
-        }
-      ],
+      choices: diagnosisOptions.map((option) => ({
+        id: option.id,
+        label: option.label,
+        detail: session.diagnosisText === option.label
+          ? option.feedback ?? "Selected working diagnosis"
+          : "Select working diagnosis",
+        selected: session.diagnosisText === option.label,
+        safe: option.correct
+      })),
       primaryLabel: "Use in plan",
       statusLabel: missingTopics.length > 0 ? "Provisional" : "Ready for plan",
       nextStep: missingTopics.length > 0
@@ -882,9 +891,8 @@ export function App() {
     if (!session) {
       return;
     }
-    const diagnosisText = diagnosisChoiceId === "case-diagnosis"
-      ? session.scenario.hiddenCase.diagnosis
-      : "More history needed before diagnosis";
+    const selected = getDiagnosisOptions(session.scenario).find((option) => option.id === diagnosisChoiceId);
+    const diagnosisText = selected?.label ?? "More history needed before diagnosis";
     const nextSession = setDiagnosis(session, diagnosisText);
     setSession(nextSession);
     setActiveActionOverlay(buildActionOverlay(nextSession, "diagnose"));

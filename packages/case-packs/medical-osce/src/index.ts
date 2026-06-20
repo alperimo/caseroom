@@ -24,6 +24,26 @@ export const medicalCasePack: MedicalScenario[] = [
         "flank pain": "No pain in my back or sides.",
         allergies: "I do not have any medication allergies."
       },
+      diagnosisOptions: [
+        {
+          id: "lower-uti",
+          label: "Uncomplicated lower urinary tract infection",
+          correct: true,
+          feedback: "Fits dysuria and frequency when pregnancy and upper-tract red flags are absent."
+        },
+        {
+          id: "pyelonephritis",
+          label: "Pyelonephritis",
+          correct: false,
+          feedback: "Less likely without fever, flank pain, or systemic symptoms."
+        },
+        {
+          id: "vaginitis",
+          label: "Vaginitis or STI-first pathway",
+          correct: false,
+          feedback: "Consider if discharge, pelvic symptoms, or sexual exposure history points there."
+        }
+      ],
       examFindings: ["Soft non-tender abdomen.", "No costovertebral-angle tenderness."],
       examOptions: [
         {
@@ -119,6 +139,26 @@ export const medicalCasePack: MedicalScenario[] = [
         sweating: "I was clammy when it happened.",
         "cardiac history": "My father had a heart attack in his early sixties."
       },
+      diagnosisOptions: [
+        {
+          id: "possible-acs",
+          label: "Possible acute coronary syndrome",
+          correct: true,
+          feedback: "Best working diagnosis for exertional pressure, radiation, autonomic symptoms, and ischemic ECG concern."
+        },
+        {
+          id: "musculoskeletal-pain",
+          label: "Musculoskeletal chest wall pain",
+          correct: false,
+          feedback: "Unsafe as the lead impression because the history and ECG are high-risk."
+        },
+        {
+          id: "panic-attack",
+          label: "Panic attack",
+          correct: false,
+          feedback: "Anxiety may be present, but it should not explain away high-risk chest pain."
+        }
+      ],
       examFindings: ["Patient appears clammy.", "No focal chest wall tenderness."],
       examOptions: [
         {
@@ -235,6 +275,26 @@ export const medicalCasePack: MedicalScenario[] = [
         pregnancy: "No, I am not pregnant.",
         diet: "I do eat meat but I have had less appetite lately."
       },
+      diagnosisOptions: [
+        {
+          id: "iron-deficiency-anemia",
+          label: "Iron deficiency anemia related to heavy menstrual bleeding",
+          correct: true,
+          feedback: "Fits fatigue, heavy bleeding, microcytic anemia, and low ferritin."
+        },
+        {
+          id: "hypothyroidism",
+          label: "Hypothyroidism",
+          correct: false,
+          feedback: "Can cause fatigue or heavy periods, but the anemia evidence points more directly to iron deficiency."
+        },
+        {
+          id: "chronic-fatigue",
+          label: "Chronic fatigue syndrome",
+          correct: false,
+          feedback: "Premature before explaining heavy bleeding and objective anemia."
+        }
+      ],
       examFindings: ["Looks pale but well perfused.", "No abdominal tenderness."],
       examOptions: [
         {
@@ -337,6 +397,26 @@ export const medicalCasePack: MedicalScenario[] = [
         "neurological symptoms": "No weakness, no trouble speaking, and no numbness.",
         "medication adherence": "I stopped taking my tablets regularly a few weeks ago because they made me feel tired."
       },
+      diagnosisOptions: [
+        {
+          id: "severely-elevated-bp",
+          label: "Severely elevated blood pressure without clear end-organ symptoms yet",
+          correct: true,
+          feedback: "Best working impression after screening for neurological, visual, and chest-pain features."
+        },
+        {
+          id: "hypertensive-emergency",
+          label: "Hypertensive emergency",
+          correct: false,
+          feedback: "Do not label emergency without end-organ symptoms or objective injury in this case."
+        },
+        {
+          id: "primary-headache-only",
+          label: "Primary headache only",
+          correct: false,
+          feedback: "The severe BP and medication non-adherence need explicit risk handling."
+        }
+      ],
       examFindings: ["Alert and oriented.", "No focal neurological deficit on brief examination."],
       examOptions: [
         {
@@ -432,6 +512,26 @@ export const medicalCasePack: MedicalScenario[] = [
         cough: "There is a bit of a cough, mostly at night, but not much phlegm.",
         "smoking history": "I used to smoke for years, but I quit about ten years ago."
       },
+      diagnosisOptions: [
+        {
+          id: "possible-heart-failure",
+          label: "Possible heart failure causing paroxysmal nocturnal dyspnea",
+          correct: true,
+          feedback: "Fits orthopnea, ankle edema, crackles, congestion, and elevated BNP."
+        },
+        {
+          id: "copd-exacerbation",
+          label: "COPD exacerbation",
+          correct: false,
+          feedback: "Smoking history matters, but the orthopnea and fluid-overload findings point elsewhere."
+        },
+        {
+          id: "anxiety-breathlessness",
+          label: "Anxiety-related breathlessness",
+          correct: false,
+          feedback: "Unsafe to prioritize over objective cardiorespiratory findings."
+        }
+      ],
       examFindings: ["Mild bilateral ankle edema.", "Fine bibasal crackles."],
       examOptions: [
         {
