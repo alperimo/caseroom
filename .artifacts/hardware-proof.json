@@ -1,0 +1,27 @@
+{
+  "capturedAt": "2026-06-20T11:34:14.109Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "node": "v24.5.0",
+  "cpus": [
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro",
+    "Apple M4 Pro"
+  ],
+  "cpuCount": 14,
+  "totalMemoryGb": 24,
+  "freeMemoryGb": 0.11,
+  "hostname": "Mac",
+  "release": "24.6.0"
+}

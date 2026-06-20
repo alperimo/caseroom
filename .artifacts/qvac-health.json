@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "status": 200,
+  "body": {
+    "ok": true,
+    "mode": "qvac-local-bridge",
+    "strictQvacMode": true,
+    "performanceLogPath": ".artifacts/performance/inference-events.jsonl",
+    "modelName": "local:medpsy-4b-q4_k_m-imat.gguf",
+    "modelLoaded": true,
+    "lastLoadError": null,
+    "ragStatus": "ready",
+    "ragReady": true,
+    "lastRagError": null,
+    "ragWorkspace": "caseroom-medical-osce",
+    "ttsReady": true,
+    "lastTtsError": null,
+    "asrModelName": "WHISPER_EN_BASE_Q8_0",
+    "asrReady": true,
+    "lastAsrError": null
+  }
+}

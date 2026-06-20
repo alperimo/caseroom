@@ -1,0 +1,179 @@
+CASE_ROOM_STRICT_QVAC=1 VITE_CASE_ROOM_STRICT_QVAC=1 CASE_ROOM_QVAC_MODEL_PATH="$PWD/models/medpsy-4b-q4_k_m-imat.gguf" npm run dev
+
+> caseroom@0.1.0 dev
+> concurrently -k -n runtime,web,electron "npm run dev:runtime" "npm run dev:web" "npm run dev:electron"
+
+[electron] 
+[electron] > caseroom@0.1.0 dev:electron
+[electron] > npm run dev:electron --workspace @caseroom/desktop
+[electron] 
+[web] 
+[web] > caseroom@0.1.0 dev:web
+[web] > npm run dev --workspace @caseroom/desktop
+[web] 
+[runtime] 
+[runtime] > caseroom@0.1.0 dev:runtime
+[runtime] > npm run dev --workspace @caseroom/qvac-runtime
+[runtime] 
+[runtime] 
+[runtime] > @caseroom/qvac-runtime@0.1.0 dev
+[runtime] > node ./server.mjs
+[runtime] 
+[web] 
+[web] > @caseroom/desktop@0.1.0 dev
+[web] > vite
+[web] 
+[electron] 
+[electron] > @caseroom/desktop@0.1.0 dev:electron
+[electron] > wait-on tcp:5173 && cross-env CASE_ROOM_DEV_SERVER_URL=http://127.0.0.1:5173 node ./electron/launch.cjs
+[electron] 
+[web] 
+[web]   VITE v7.3.5  ready in 213 ms
+[web] 
+[web]   ➜  Local:   http://127.0.0.1:5173/
+[runtime] [qvac] bridge listening on http://127.0.0.1:4545
+[runtime] [sdk:server] 🐻 Hello from Bare
+[runtime] [sdk:server] Parsed RPC configuration from arguments
+[runtime] [sdk:server] Running in desktop mode, connecting to IPC socket: /var/folders/sh/hlv9j_9x1ws23dxbqp21rgvm0000gn/T/qvac-worker-98260-mqmgdrps-83c1.sock
+[runtime] [sdk:server] Connecting to IPC socket at /var/folders/sh/hlv9j_9x1ws23dxbqp21rgvm0000gn/T/qvac-worker-98260-mqmgdrps-83c1.sock
+[runtime] [sdk:server] Bare worker started and listening for RPC requests
+[runtime] [sdk:server] Connected to IPC server
+[runtime] [sdk:client] ℹ️ No config file found, using SDK defaults
+[runtime] [sdk:client] 📱 Runtime context: { runtime: 'node', platform: 'darwin' }
+[runtime] [sdk:client] ✅ Initialization complete
+[runtime] [sdk:server] [request-lifecycle] begin requestId=fb30b5e8-d46d-472d-8640-cd0b70b7c987 kind=loadModel modelId=- state=running
+[runtime] [sdk:server] Loading from registry: ChristianAzinn/gte-large-gguf/blob/f9fa5479908e72c2a8b9d6ba112911cd1e51be53/gte-large_fp16.gguf
+[runtime] [sdk:server] ✅ Model cached with correct size: /Users/alperenf/.qvac/models/8441c7419e66033f_gte-large_fp16.gguf
+[electron] [98311:0620/162844.334336:ERROR:CONSOLE(1)] "Request Autofill.enable failed. {"code":-32601,"message":"'Autofill.enable' wasn't found"}", source: devtools://devtools/bundled/core/protocol_client/protocol_client.js (1)
+[electron] [98311:0620/162844.334362:ERROR:CONSOLE(1)] "Request Autofill.setAddresses failed. {"code":-32601,"message":"'Autofill.setAddresses' wasn't found"}", source: devtools://devtools/bundled/core/protocol_client/protocol_client.js (1)
+[runtime] [sdk:server] [request-lifecycle] begin requestId=6f9033c0-9bb5-4bbd-9108-7ca674671ed7 kind=loadModel modelId=- state=running
+[runtime] [sdk:server] llamacpp-completion: Loading model 97cad676c521433c...
+[runtime] parse: load the model metadata from disk file.
+[runtime] initFromConfig: load the model from disk file and apply lora adapter, if any.
+[runtime] common_init_result: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on
+[runtime] common_init_result: added </s> logit bias = -inf
+[runtime] common_init_result: added <|endoftext|> logit bias = -inf
+[runtime] common_init_result: added <|im_end|> logit bias = -inf
+[runtime] common_init_result: added <|fim_pad|> logit bias = -inf
+[runtime] common_init_result: added <|repo_name|> logit bias = -inf
+[runtime] common_init_result: added <|file_sep|> logit bias = -inf
+[runtime] [sdk:server] llamacpp-completion model 97cad676c521433c loaded
+[runtime] [sdk:server] Local model registered: 97cad676c521433c -> /Users/alperenf/Projects/git/caseroom/models/medpsy-4b-q4_k_m-imat.gguf
+[runtime] [sdk:server] [request-lifecycle] end requestId=6f9033c0-9bb5-4bbd-9108-7ca674671ed7 kind=loadModel modelId=- state=completed durationMs=4169
+[runtime] [sdk:server] ✅ Model already cached and validated: /Users/alperenf/.qvac/models/8441c7419e66033f_gte-large_fp16.gguf
+[runtime] [sdk:server] ✅ Using cached model: /Users/alperenf/.qvac/models/8441c7419e66033f_gte-large_fp16.gguf
+[runtime] [sdk:server] Loaded Model to /Users/alperenf/.qvac/models/8441c7419e66033f_gte-large_fp16.gguf
+[runtime] [sdk:server] llamacpp-embedding: Loading model c8fb5f8badf52854...
+[runtime] [qvac] loading embeddings: 100.0%
+[runtime] [qvac] model ready: local:medpsy-4b-q4_k_m-imat.gguf (97cad676c521433c)
+[runtime] initFromConfig: load the model from disk file and apply lora adapter, if any.
+[runtime] common_init_result: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on
+[runtime] common_init_result: added [PAD] logit bias = -inf
+[runtime] common_init_result: added [SEP] logit bias = -inf
+[runtime] common_init_from_model_and_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+[runtime] [sdk:server] llamacpp-embedding model c8fb5f8badf52854 loaded
+[runtime] [sdk:server] Local model registered: c8fb5f8badf52854 (GTE_LARGE_FP16) -> /Users/alperenf/.qvac/models/8441c7419e66033f_gte-large_fp16.gguf
+[runtime] [sdk:server] [request-lifecycle] end requestId=fb30b5e8-d46d-472d-8640-cd0b70b7c987 kind=loadModel modelId=- state=completed durationMs=5745
+[runtime] [qvac] embedding model ready (c8fb5f8badf52854)
+[runtime] [sdk:server] [request-lifecycle] begin requestId=381461a3-3162-4c66-9cd3-123882bd1aea kind=loadModel modelId=- state=running
+[runtime] [sdk:server] [request-lifecycle] begin requestId=cf4fe8a5-08d4-4fbf-b249-58a7a130eea6 kind=loadModel modelId=- state=running
+[runtime] [sdk:server] Loading from registry: qvac_models_compiled/ggml/supertonic/2026-05-18/supertonic-q8_0.gguf
+[runtime] [sdk:server] Loading from registry: ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en-q8_0.bin
+[runtime] [sdk:server] Loading from registry: ggml-org/whisper-vad/resolve/9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v5.1.2.bin
+[runtime] [sdk:server] ✅ Model cached with correct size: /Users/alperenf/.qvac/models/dd850e3b81539045_ggml-silero-v5.1.2.bin
+[runtime] [sdk:server] ✅ Model cached with correct size: /Users/alperenf/.qvac/models/4a7a0a6c5a613dfc_ggml-base.en-q8_0.bin
+[runtime] [sdk:server] ✅ Model cached with correct size: /Users/alperenf/.qvac/models/764e2ff62f713a87_supertonic-q8_0.gguf
+[runtime] [sdk:server] ✅ Model already cached and validated: /Users/alperenf/.qvac/models/dd850e3b81539045_ggml-silero-v5.1.2.bin
+[runtime] [sdk:server] ✅ Using cached model: /Users/alperenf/.qvac/models/dd850e3b81539045_ggml-silero-v5.1.2.bin
+[runtime] [sdk:server] Loaded Model to /Users/alperenf/.qvac/models/dd850e3b81539045_ggml-silero-v5.1.2.bin
+[runtime] [qvac] loading WHISPER_EN_BASE_Q8_0: 100.0%
+[runtime] [sdk:server] ✅ Model already cached and validated: /Users/alperenf/.qvac/models/4a7a0a6c5a613dfc_ggml-base.en-q8_0.bin
+[runtime] [sdk:server] ✅ Using cached model: /Users/alperenf/.qvac/models/4a7a0a6c5a613dfc_ggml-base.en-q8_0.bin
+[runtime] [sdk:server] Loaded Model to /Users/alperenf/.qvac/models/4a7a0a6c5a613dfc_ggml-base.en-q8_0.bin
+[runtime] [sdk:server] whispercpp-transcription: Loading model aeca956f5679d2ac...
+[runtime] [sdk:server] whispercpp-transcription model aeca956f5679d2ac loaded
+[runtime] [sdk:server] Local model registered: aeca956f5679d2ac (WHISPER_EN_BASE_Q8_0) -> /Users/alperenf/.qvac/models/4a7a0a6c5a613dfc_ggml-base.en-q8_0.bin
+[runtime] [sdk:server] [request-lifecycle] end requestId=cf4fe8a5-08d4-4fbf-b249-58a7a130eea6 kind=loadModel modelId=- state=completed durationMs=245
+[runtime] [qvac] loading WHISPER_EN_BASE_Q8_0: 100.0%
+[runtime] [qvac] ASR ready (aeca956f5679d2ac)
+[runtime] [sdk:server] ✅ Model already cached and validated: /Users/alperenf/.qvac/models/764e2ff62f713a87_supertonic-q8_0.gguf
+[runtime] [sdk:server] ✅ Using cached model: /Users/alperenf/.qvac/models/764e2ff62f713a87_supertonic-q8_0.gguf
+[runtime] [sdk:server] Loaded Model to /Users/alperenf/.qvac/models/764e2ff62f713a87_supertonic-q8_0.gguf
+[runtime] [qvac] loading Supertonic TTS: 100.0%
+[runtime] [sdk:server] tts-ggml: Loading model a0e8f958f1268705...
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_metal_device_init: tensor API disabled for pre-M5 and pre-A19 devices
+[runtime] ggml_metal_library_init: using embedded metal library
+[runtime] ggml_metal_library_init: loaded in 0.006 sec
+[runtime] ggml_metal_rsets_init: creating a residency set collection (keep_alive = 180 s)
+[runtime] ggml_metal_device_init: GPU name:   MTL0 (Apple M4 Pro)
+[runtime] ggml_metal_device_init: GPU family: MTLGPUFamilyApple9  (1009)
+[runtime] ggml_metal_device_init: GPU family: MTLGPUFamilyCommon3 (3003)
+[runtime] ggml_metal_device_init: GPU family: MTLGPUFamilyMetal3  (5001)
+[runtime] ggml_metal_device_init: simdgroup reduction   = true
+[runtime] ggml_metal_device_init: simdgroup matrix mul. = true
+[runtime] ggml_metal_device_init: has unified memory    = true
+[runtime] ggml_metal_device_init: has bfloat            = true
+[runtime] ggml_metal_device_init: has tensor            = false
+[runtime] ggml_metal_device_init: use residency sets    = true
+[runtime] ggml_metal_device_init: use shared buffers    = true
+[runtime] ggml_metal_device_init: recommendedMaxWorkingSetSize  = 17179.89 MB
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] ggml_backend_load_best: search path /Users/alperenf/Projects/git/caseroom/node_modules/@qvac/tts-ggml/prebuilds/darwin-arm64/qvac__tts-ggml does not exist
+[runtime] [sdk:server] tts-ggml model a0e8f958f1268705 loaded
+[runtime] [sdk:server] Local model registered: a0e8f958f1268705 (TTS_EN_SUPERTONIC_Q8_0) -> /Users/alperenf/.qvac/models/764e2ff62f713a87_supertonic-q8_0.gguf
+[runtime] [sdk:server] [request-lifecycle] end requestId=381461a3-3162-4c66-9cd3-123882bd1aea kind=loadModel modelId=- state=completed durationMs=473
+[runtime] [qvac] TTS ready (a0e8f958f1268705)
+[runtime] [sdk:server] [request-lifecycle] begin requestId=8b8d37cb-d0a5-4462-af71-27584e9055b8 kind=transcribe modelId=aeca956f5679d2ac state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=8b8d37cb-d0a5-4462-af71-27584e9055b8 kind=transcribe modelId=aeca956f5679d2ac state=completed durationMs=408
+[runtime] [sdk:server] [request-lifecycle] begin requestId=325b0f04-d18d-474d-856e-0e7e47c138c1 kind=completion modelId=97cad676c521433c state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=325b0f04-d18d-474d-856e-0e7e47c138c1 kind=completion modelId=97cad676c521433c state=completed durationMs=5446
+[runtime] [qvac] extract-topics request for turns: ["patient: Hello doctor. I got a heavy pain in my chest after climbing the stairs and it scared me.","clinician: Can you describe your chest pain? When did it start and what does it feel like?","patient: It started right when I was climbing the stairs, and it felt like a heavy pressure in my chest, almost like an elephant sitting on me. It spread into my left arm for a few minutes and I was really breathless and sweaty too. I was so scared I had to stop right away."]
+[runtime] [sdk:server] [request-lifecycle] begin requestId=f066aa3d-bf57-4714-9aa7-6825732b6091 kind=completion modelId=97cad676c521433c state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=f066aa3d-bf57-4714-9aa7-6825732b6091 kind=completion modelId=97cad676c521433c state=completed durationMs=10883
+[runtime] [qvac] extract-topics output mapping: {"radiation":true,"shortness of breath":true,"sweating":true,"cardiac history":false}
+[runtime] [sdk:server] [request-lifecycle] begin requestId=d2160202-8669-4d9a-b5f6-3b25bd2cbd1d kind=transcribe modelId=aeca956f5679d2ac state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=d2160202-8669-4d9a-b5f6-3b25bd2cbd1d kind=transcribe modelId=aeca956f5679d2ac state=completed durationMs=408
+[runtime] [sdk:server] [request-lifecycle] begin requestId=4b903127-ebd2-4744-90ff-7faa385e18f7 kind=completion modelId=97cad676c521433c state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=4b903127-ebd2-4744-90ff-7faa385e18f7 kind=completion modelId=97cad676c521433c state=completed durationMs=4234
+[runtime] [qvac] extract-topics request for turns: ["patient: It started right when I was climbing the stairs, and it felt like a heavy pressure in my chest, almost like an elephant sitting on me. It spread into my left arm for a few minutes and I was really breathless and sweaty too. I was so scared I had to stop right away.","clinician: Did the pain spread anywhere else, like your arm, shoulder, jaw, or back?","patient: It did spread into my left arm, but not to my shoulder, jaw, or back. I was really worried because it felt like it was traveling down that one arm."]
+[runtime] [sdk:server] [request-lifecycle] begin requestId=d7189022-773d-4715-b17e-850c3d7c18c8 kind=completion modelId=97cad676c521433c state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=d7189022-773d-4715-b17e-850c3d7c18c8 kind=completion modelId=97cad676c521433c state=completed durationMs=9074
+[runtime] [qvac] extract-topics output mapping: {"cardiac history":false}
+[runtime] [sdk:server] [request-lifecycle] begin requestId=a61f4540-a9e5-4c7a-967f-f84e29a65d06 kind=transcribe modelId=aeca956f5679d2ac state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=a61f4540-a9e5-4c7a-967f-f84e29a65d06 kind=transcribe modelId=aeca956f5679d2ac state=completed durationMs=409
+[runtime] [sdk:server] [request-lifecycle] begin requestId=cce7ca70-035b-409b-b6be-212387110c72 kind=completion modelId=97cad676c521433c state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=cce7ca70-035b-409b-b6be-212387110c72 kind=completion modelId=97cad676c521433c state=completed durationMs=7159
+[runtime] [qvac] extract-topics request for turns: ["patient: It did spread into my left arm, but not to my shoulder, jaw, or back. I was really worried because it felt like it was traveling down that one arm.","clinician: Have you felt short of breath, very dizzy or nauseated?","patient: No, I didn't feel very dizzy or nauseated, just the heavy chest pain and breathlessness. I was really scared it was my heart, especially with my dad's history. I haven't felt like this before."]
+[runtime] [sdk:server] [request-lifecycle] begin requestId=5c86c39a-28cf-4a1b-a3b3-a4875e03edf5 kind=completion modelId=97cad676c521433c state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=5c86c39a-28cf-4a1b-a3b3-a4875e03edf5 kind=completion modelId=97cad676c521433c state=completed durationMs=5853
+[runtime] [qvac] extract-topics output mapping: {"cardiac history":true}
+[runtime] [sdk:server] [request-lifecycle] begin requestId=3d588f02-af11-420d-942e-a608bbddc288 kind=transcribe modelId=aeca956f5679d2ac state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=3d588f02-af11-420d-942e-a608bbddc288 kind=transcribe modelId=aeca956f5679d2ac state=completed durationMs=408
+[runtime] [sdk:server] [request-lifecycle] begin requestId=d3f78e45-208b-40d5-8b44-fb8fb4a0235d kind=completion modelId=97cad676c521433c state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=d3f78e45-208b-40d5-8b44-fb8fb4a0235d kind=completion modelId=97cad676c521433c state=completed durationMs=4637
+[runtime] [sdk:server] [request-lifecycle] begin requestId=09968851-c091-476f-963b-cccdbd80afc4 kind=embeddings modelId=c8fb5f8badf52854 state=running
+[runtime] [sdk:server] [request-lifecycle] end requestId=09968851-c091-476f-963b-cccdbd80afc4 kind=embeddings modelId=c8fb5f8badf52854 state=completed durationMs=318
+[runtime] [sdk:client] Received SIGINT, closing RPC resources...
+[runtime] [sdk:server] 🐻 Bare worker shutdown signal received, cleaning up...
+[runtime] [qvac] received SIGINT; unloading tracked models...
+[runtime] [sdk:server] 🧹 Cancelling 0 active downloads
+[web] npm run dev:web exited with code SIGINT
+--> Sending SIGTERM to other processes..
+[runtime] [sdk:server] IPC socket closed — parent process likely terminated
+[runtime] [sdk:server] Unloaded 4 models
+[runtime] [sdk:server] ✅ Cleanup completed successfully
+[electron] npm run dev:electron exited with code 0
+--> Sending SIGTERM to other processes..

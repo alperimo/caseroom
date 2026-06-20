@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-06-20T11:58:46Z",
+  "product": "CaseRoom",
+  "purpose": "Repository evidence bundle for local-first QVAC review",
+  "track": "General Purpose + Psy Models",
+  "runtimeClaim": {
+    "strictQvacMode": true,
+    "remoteInferenceApis": 0,
+    "completionModel": "local:medpsy-4b-q4_k_m-imat.gguf",
+    "embeddingModel": "GTE_LARGE_FP16",
+    "asrModel": "WHISPER_EN_BASE_Q8_0",
+    "ttsModel": "TTS_EN_SUPERTONIC_Q8_0"
+  },
+  "files": [
+    {
+      "path": ".artifacts/hardware-proof.json",
+      "purpose": "Machine, OS, CPU, RAM, and Node runtime snapshot captured during the evidence run."
+    },
+    {
+      "path": ".artifacts/qvac-health.json",
+      "purpose": "Local QVAC bridge health snapshot showing strict mode, loaded MedPsy model, local RAG readiness, ASR readiness, and TTS readiness."
+    },
+    {
+      "path": ".artifacts/remote-api-calls.json",
+      "purpose": "Transparency declaration for runtime remote API usage; runtime inference API list is empty."
+    },
+    {
+      "path": ".artifacts/case-report.md",
+      "purpose": "Saved debrief report from the standard chest-pain demo run."
+    },
+    {
+      "path": ".artifacts/performance/inference-events.jsonl",
+      "purpose": "Structured QVAC runtime event log for model loads and inference calls."
+    },
+    {
+      "path": ".artifacts/performance/inference-summary.json",
+      "purpose": "Parsed summary of inference-events.jsonl with model loads, ASR/TTS/RAG/completion counts, durations, token estimates, and notes."
+    },
+    {
+      "path": ".artifacts/performance/terminal-logs.txt",
+      "purpose": "Terminal capture from the strict local QVAC demo run, including model load, ASR/TTS readiness, topic extraction calls, and shutdown cleanup."
+    },
+    {
+      "path": ".artifacts/artifact-manifest.json",
+      "purpose": "Index of the compact repository evidence set and remaining external submission artifacts."
+    }
+  ],
+  "externalArtifactsStillRequired": [
+    "Demo video, ideally under 3 minutes and never over 5 minutes.",
+    "Hardware proof screenshot or short screen recording from macOS System Settings/System Report.",
+    "Public repository URL and final submission metadata."
+  ],
+  "notes": [
+    "The .artifacts/submission directory is generated and ignored; the root .artifacts files are the compact repo evidence set.",
+    "Model artifact downloads are disclosed in remote-api-calls.json as acquisition-time downloads, not runtime inference APIs.",
+    "Completion TTFT is captured for streamed QVAC completion calls. Non-completion operations such as ASR, TTS, and RAG may leave ttftMs null while still recording durationMs."
+  ]
+}
