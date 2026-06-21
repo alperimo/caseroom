@@ -18,6 +18,9 @@ CaseRoom is a local-first, voice-first clinical simulation room for high-stakes 
 <img width="1725" height="913" alt="image" src="https://github.com/user-attachments/assets/f0230e46-e9ef-4b63-a4fd-c9cc96904439" />
 <img width="1727" height="913" alt="image" src="https://github.com/user-attachments/assets/c9c8bd23-08cc-4446-9b06-8f9f6c1b804c" />
 
+## Clinical use notice
+
+CaseRoom is an educational simulation product for training and rehearsal. It is not a medical device and is not intended for real-patient diagnosis, treatment, triage, prescribing, or emergency decision-making. Demo scenarios, transcripts, and debriefs in this repository use synthetic training cases only.
 
 ## Run locally
 
